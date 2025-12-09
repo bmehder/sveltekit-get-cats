@@ -86,6 +86,7 @@
 	 * state machine to remain pure while enabling centralized interpretation,
 	 * testing, logging, replay, and instrumentation of impure behavior.
 	 */
+
 	type Effect =
 		| { kind: 'FetchCat' }
 		| { kind: 'LogInfo'; message: string }
@@ -171,6 +172,7 @@
 	)
 
 	// EFFECT IMPLEMENTATION ------------------------------------------------------
+
 	/**
 	 * Concrete implementation of the `FetchCat` effect.
 	 *
@@ -203,6 +205,7 @@
 			})
 
 	// TRANSITIONS ---------------------------------------------------------------
+
 	/**
 	 * Pure state transition function.
 	 *
@@ -234,9 +237,7 @@
 					remoteFetchStatus: { kind: 'Success' },
 					cats: [...model.cats, ...cats],
 				},
-				effects: [
-					{ kind: 'LogInfo', message: `Cats loaded: ${cats.length} new cat(s)` },
-				],
+				effects: [{ kind: 'LogInfo', message: `Cats loaded: ${cats.length}` }],
 			}),
 
 			CatsFailedToLoad: ({ error }) => ({
@@ -265,6 +266,7 @@
 		})
 
 	// MESSAGE EXECUTION ----------------------------------------------------------
+	
 	/**
 	 * Central message executor and effect coordinator.
 	 *
@@ -279,6 +281,7 @@
 	 * This structure cleanly separates pure decision-making from impure
 	 * execution while preserving finite state machine guarantees.
 	 */
+
 	const handleMessage = (msg: Msg): void => {
 		const { model: nextModel, effects } = transition(msg)
 
@@ -286,6 +289,8 @@
 
 		effects.forEach(runEffect)
 	}
+
+	$inspect(model)
 </script>
 
 <!-- VIEW --------------------------------------------------------------------->
