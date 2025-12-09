@@ -1,4 +1,14 @@
 <script lang="ts">
+	/**
+	 * ARCHITECTURE OVERVIEW
+	 *
+	 * This application follows a unidirectional data flow inspired by The Elm Architecture:
+	 *   View → Msg → Transition → Model → View
+	 *
+	 * All side effects are modeled as typed data (`Effect`) and executed exclusively by a
+	 * central interpreter (`runEffect`), keeping state transitions pure and deterministic.
+	 */
+
 	// IMPORTS ---------------------------------------------------------------------
 
 	import { z } from 'zod'
@@ -48,22 +58,17 @@
 	 * long-term maintainability.
 	 */
 
-	type RemoteDataStatus<E> =
+	type Cat = z.infer<typeof CatSchema>
+
+	type RemoteFetchStatus<E> =
 		| { kind: 'Idle' }
 		| { kind: 'Loading' }
 		| { kind: 'Failure'; error: E }
 		| { kind: 'Success' }
 
-	type PromiseCallback<T = any> =
-		| ((value: T) => void | PromiseLike<void>)
-		| null
-		| undefined
-
-	type Cat = z.infer<typeof CatSchema>
-
 	type Model = {
+		remoteFetchStatus: RemoteFetchStatus<string>
 		cats: Cat[]
-		catRequestStatus: RemoteDataStatus<string>
 	}
 
 	type Msg =
@@ -72,6 +77,53 @@
 		| { kind: 'CatsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
+
+	/**
+	 * Effect Algebra
+	 *
+	 * Effects are modeled as data (rather than direct function calls) to make all
+	 * side effects explicit, declarative, and statically enumerable. This allows the
+	 * state machine to remain pure while enabling centralized interpretation,
+	 * testing, logging, replay, and instrumentation of impure behavior.
+	 */
+	type Effect =
+		| { kind: 'FetchCat' }
+		| { kind: 'LogInfo'; message: string }
+		| { kind: 'LogError'; message: string }
+
+	type Transition = {
+		model: Model
+		effects: Effect[]
+	}
+
+	// EFFECT INTERPRETER ---------------------------------------------------------
+	/**
+	 * Central effect interpreter.
+	 *
+	 * This function is the single impure execution boundary for the application.
+	 * It interprets declarative `Effect` values produced by pure state
+	 * transitions and performs the corresponding real-world side effects.
+	 *
+	 * Responsibilities:
+	 * - Execute all declared effects produced by transitions
+	 * - Centralize and contain all side effects (I/O, logging, etc.)
+	 * - Provide a single choke point for debugging, testing, and instrumentation
+	 */
+
+	const runEffect = (effect: Effect): void =>
+		matchStrict(effect, {
+			FetchCat: () => {
+				getNewCat()
+			},
+
+			LogInfo: ({ message }) => {
+				console.log(message)
+			},
+
+			LogError: ({ message }) => {
+				console.error(message)
+			},
+		})
 
 	// MODEL (STATE) --------------------------------------------------------------
 
@@ -93,22 +145,24 @@
 	 */
 
 	// Explicit state
+
 	let model = $state<Model>({
-		catRequestStatus: { kind: 'Idle' },
+		remoteFetchStatus: { kind: 'Idle' },
 		cats: [],
 	})
 
 	// Derived values
+
+	let isLoading = $derived(model.remoteFetchStatus.kind === 'Loading')
+
+	let isNoCats = $derived(model.cats.length === 0)
+
+	let isFailure = $derived(model.remoteFetchStatus.kind === 'Failure')
+
 	let numberOfCats = $derived(model.cats.length)
 
-	let isDisabled = $derived(
-		model.cats.length === 0 || model.catRequestStatus.kind === 'Loading'
-	)
-
-	let isFailure = $derived(model.catRequestStatus.kind === 'Failure')
-
 	let catRequestMessage = $derived<string | null>(
-		matchStrict(model.catRequestStatus, {
+		matchStrict(model.remoteFetchStatus, {
 			Idle: () => null,
 			Loading: () => 'Loading a new cat...',
 			Failure: ({ error }) => error,
@@ -116,80 +170,122 @@
 		})
 	)
 
-	// UPDATE --------------------------------------------------------------------
-
+	// EFFECT IMPLEMENTATION ------------------------------------------------------
 	/**
-	 * Central message dispatcher and state transition function.
+	 * Concrete implementation of the `FetchCat` effect.
 	 *
-	 * `update` receives a typed message (event) and applies the corresponding
-	 * state transition via exhaustive pattern matching. This function defines
-	 * the authoritative rules for how the model may change over time.
+	 * This function performs the actual HTTP request, logs raw and parsed
+	 * responses, and feeds the resulting outcome back into the system by
+	 * emitting new messages via `handleMessage`.
 	 *
-	 * Responsibilities:
-	 * - Enforces that all valid messages are handled
-	 * - Encapsulates all state mutations in one place
-	 * - Acts as the boundary between external events and internal state
-	 *
-	 * This pattern enables predictable state evolution, simplifies debugging,
-	 * and makes the system behave like a finite state machine.
+	 * This function is intentionally impure and lives strictly within the
+	 * effect layer.
 	 */
 
-	const update = (msg: Msg): void =>
-		matchStrict(msg, {
-			UserClickedGetNewCat: () => {
-				model.catRequestStatus = { kind: 'Loading' }
+	const getNewCat = (): Promise<void> =>
+		fetch('https://api.thecatapi.com/v1/images/search')
+			.then(response => response.json())
+			.then(json => {
+				const { success, data } = CatsResponseSchema.safeParse(json)
 
-				fetch('https://api.thecatapi.com/v1/images/search')
-					.then(response => response.json())
-					.then(json => {
-						const parsedCatsResponse = CatsResponseSchema.safeParse(json)
-
-						parsedCatsResponse.success
-							? update({
-									kind: 'CatsLoaded',
-									cats: parsedCatsResponse.data,
-								})
-							: update({
-									kind: 'CatsFailedToLoad',
-									error: 'API response failed validation.',
-								})
-					})
-					.catch(err => {
-						update({
-							kind: 'CatsFailedToLoad',
-							error: String(err),
+				success
+					? handleMessage({
+							kind: 'CatsLoaded',
+							cats: data,
 						})
-					})
-			},
+					: handleMessage({
+							kind: 'CatsFailedToLoad',
+							error: 'API response failed validation.',
+						})
+			})
+			.catch(err => {
+				handleMessage({ kind: 'CatsFailedToLoad', error: String(err) })
+			})
 
-			CatsLoaded: ({ cats }) => {
-				model = {
-					catRequestStatus: { kind: 'Success' },
-					cats: [...model.cats, ...cats],
-				}
-			},
+	// TRANSITIONS ---------------------------------------------------------------
+	/**
+	 * Pure state transition function.
+	 *
+	 * Maps an incoming message to the next model state and a list of declarative
+	 * effects. This function is completely pure: it performs no I/O and triggers
+	 * no side effects directly.
+	 *
+	 * Responsibilities:
+	 * - Define all valid state transitions
+	 * - Declare any effects that should occur as a result of a transition
+	 * - Preserve exhaustiveness and protocol correctness via `matchStrict`
+	 */
 
-			CatsFailedToLoad: ({ error }) => {
-				model = {
-					catRequestStatus: { kind: 'Failure', error },
+	const transition = (msg: Msg): Transition =>
+		matchStrict(msg, {
+			UserClickedGetNewCat: () => ({
+				model: {
+					remoteFetchStatus: { kind: 'Loading' },
 					cats: model.cats,
-				}
-			},
+				},
+				effects: [
+					{ kind: 'LogInfo', message: 'User clicked Get New Cat' },
+					{ kind: 'FetchCat' },
+				],
+			}),
 
-			UserClickedRemoveLast: () => {
-				model = {
-					catRequestStatus: { kind: 'Idle' },
+			CatsLoaded: ({ cats }) => ({
+				model: {
+					remoteFetchStatus: { kind: 'Success' },
+					cats: [...model.cats, ...cats],
+				},
+				effects: [
+					{ kind: 'LogInfo', message: `Cats loaded: ${cats.length} new cat(s)` },
+				],
+			}),
+
+			CatsFailedToLoad: ({ error }) => ({
+				model: {
+					remoteFetchStatus: { kind: 'Failure', error },
+					cats: model.cats,
+				},
+				effects: [{ kind: 'LogError', message: `Cats failed to load: ${error}` }],
+			}),
+
+			UserClickedRemoveLast: () => ({
+				model: {
+					remoteFetchStatus: model.remoteFetchStatus,
 					cats: model.cats.slice(0, -1),
-				}
-			},
+				},
+				effects: [],
+			}),
 
-			UserClickedRemoveAll: () => {
-				model = {
-					catRequestStatus: { kind: 'Idle' },
+			UserClickedRemoveAll: () => ({
+				model: {
+					remoteFetchStatus: model.remoteFetchStatus,
 					cats: [],
-				}
-			},
+				},
+				effects: [],
+			}),
 		})
+
+	// MESSAGE EXECUTION ----------------------------------------------------------
+	/**
+	 * Central message executor and effect coordinator.
+	 *
+	 * Orchestrates the unidirectional flow:
+	 *
+	 *   Msg → Transition → Model Commit → Effect Interpreter
+	 *
+	 * This function applies the pure transition, commits the resulting model as
+	 * the new application state, then executes each declared effect through the
+	 * effect interpreter.
+	 *
+	 * This structure cleanly separates pure decision-making from impure
+	 * execution while preserving finite state machine guarantees.
+	 */
+	const handleMessage = (msg: Msg): void => {
+		const { model: nextModel, effects } = transition(msg)
+
+		model = nextModel
+
+		effects.forEach(runEffect)
+	}
 </script>
 
 <!-- VIEW --------------------------------------------------------------------->
@@ -214,20 +310,23 @@
 	<div class="outer">
 		<div class="inner" style="--inner-padding-block: 0;">
 			<div class="flex flex-wrap items-center gap-0-5">
-				<button onclick={() => update({ kind: 'UserClickedGetNewCat' })}>
+				<button
+					onclick={() => handleMessage({ kind: 'UserClickedGetNewCat' })}
+					disabled={isLoading}
+				>
 					Get New Cat
 				</button>
 
 				<button
-					onclick={() => update({ kind: 'UserClickedRemoveLast' })}
-					disabled={isDisabled}
+					onclick={() => handleMessage({ kind: 'UserClickedRemoveLast' })}
+					disabled={isLoading || isNoCats}
 				>
 					Remove Last
 				</button>
 
 				<button
-					onclick={() => update({ kind: 'UserClickedRemoveAll' })}
-					disabled={isDisabled}
+					onclick={() => handleMessage({ kind: 'UserClickedRemoveAll' })}
+					disabled={isLoading || isNoCats}
 				>
 					Remove All
 				</button>
