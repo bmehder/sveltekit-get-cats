@@ -5,8 +5,8 @@
 	 * This application follows a unidirectional data flow inspired by The Elm Architecture:
 	 *   View → Msg → Transition → Model → View
 	 *
-	 * All side effects are modeled as typed data (`Effect`) and executed
-	 * exclusively by a central interpreter (`runEffect`), keeping state
+	 * All side commands are modeled as typed data (`Command`) and executed
+	 * exclusively by a central interpreter (`runCommand`), keeping state
 	 * transitions pure and deterministic.
 	 */
 
@@ -81,34 +81,45 @@
 		| { kind: 'UserClickedRemoveAll' }
 
 	/**
-	 * Effect Algebra
+	 * Command Algebra
 	 *
-	 * Effects are modeled as data (rather than direct function calls) to make all
-	 * side effects explicit, declarative, and statically enumerable. This allows the
+	 * Commands are modeled as data (rather than direct function calls) to make all
+	 * side commands explicit, declarative, and statically enumerable. This allows the
 	 * state machine to remain pure while enabling centralized interpretation,
 	 * testing, logging, replay, and instrumentation of impure behavior.
 	 */
 
-	type Effect =
+	type Command =
 		| { kind: 'FetchCat' }
 		| { kind: 'LogInfo'; message: string }
 		| { kind: 'LogError'; message: string }
 
 	type Transition = {
 		model: Model
-		effects: Effect[]
+		commands: Command[]
 	}
 
-	// EFFECT IMPLEMENTATION ------------------------------------------------------
+	/**
+	 * Subscriptions
+	 *
+	 * Subscriptions represent long-lived external event sources that can emit
+	 * messages into the system over time (e.g., keyboard input, timers, sockets).
+	 * They are interpreted once at startup and are responsible for calling
+	 * `handleMessage` when relevant events occur.
+	 */
+
+	type Subscription = { kind: 'UserPressedKeyC' } | { kind: 'UserPressedKeyD' }
+
+	// COMMAND IMPLEMENTATION ------------------------------------------------------
 
 	/**
-	 * Concrete implementation of the `FetchCat` effect.
+	 * Concrete implementation of the `FetchCat` command.
 	 *
 	 * This function performs the actual HTTP request and feeds the resulting
 	 * outcome back into the system by emitting new messages via `handleMessage`.
 	 *
 	 * This function is intentionally impure and lives strictly within the
-	 * effect layer.
+	 * command layer.
 	 */
 
 	const getNewCat = (): Promise<void> =>
@@ -133,20 +144,20 @@
 
 	// EFFECT INTERPRETER ---------------------------------------------------------
 	/**
-	 * Central effect interpreter.
+	 * Central command interpreter.
 	 *
 	 * This function is the single impure execution boundary for the application.
-	 * It interprets declarative `Effect` values produced by pure state
-	 * transitions and performs the corresponding real-world side effects.
+	 * It interprets declarative `Command` values produced by pure state
+	 * transitions and performs the corresponding real-world side commands.
 	 *
 	 * Responsibilities:
-	 * - Execute all declared effects produced by transitions
-	 * - Centralize and contain all side effects (I/O, logging, etc.)
+	 * - Execute all declared commands produced by transitions
+	 * - Centralize and contain all side commands (I/O, logging, etc.)
 	 * - Provide a single choke point for debugging, testing, and instrumentation
 	 */
 
-	const runEffect = (effect: Effect): void =>
-		matchStrict(effect, {
+	const runCommand = (command: Command): void =>
+		matchStrict(command, {
 			FetchCat: () => {
 				getNewCat()
 			},
@@ -160,18 +171,71 @@
 			},
 		})
 
+	// SUBSCRIPTION INTERPRETER -----------------------------------------------------
+
+	/**
+	 * Interprets long-lived subscriptions and returns a cleanup function.
+	 *
+	 * For `KeyPress`, a global keydown listener is registered. When the configured
+	 * key is pressed, a message is emitted back into the system via `handleMessage`.
+	 */
+	const runSubscription = (sub: Subscription): (() => void) =>
+		matchStrict(sub, {
+			UserPressedKeyC: () => {
+				const handler = (event: KeyboardEvent) => {
+					if (event.key === 'c') {
+						handleMessage({ kind: 'UserClickedGetNewCat' })
+					}
+				}
+
+				window.addEventListener('keydown', handler)
+
+				return () => {
+					window.removeEventListener('keydown', handler)
+				}
+			},
+
+			UserPressedKeyD: () => {
+				const handler = (event: KeyboardEvent) => {
+					if (event.key === 'd') {
+						handleMessage({ kind: 'UserClickedRemoveLast' })
+					}
+				}
+
+				window.addEventListener('keydown', handler)
+
+				return () => {
+					window.removeEventListener('keydown', handler)
+				}
+			},
+		})
+
+	// SUBSCRIPTIONS ---------------------------------------------------------------
+
+	/**
+	 * Subscription configuration.
+	 *
+	 * In a larger app this could depend on the model (e.g., only subscribe to
+	 * certain events in certain states). For this demo, we always listen for the
+	 * 'c' key to fetch a new cat.
+	 */
+	const subscriptions = (_model: Model): Subscription[] => [
+		{ kind: 'UserPressedKeyC' },
+		{ kind: 'UserPressedKeyD' },
+	]
+
 	// TRANSITIONS ---------------------------------------------------------------
 
 	/**
 	 * Pure state transition function.
 	 *
 	 * Maps an incoming message to the next model state and a list of declarative
-	 * effects. This function is completely pure: it performs no I/O and triggers
-	 * no side effects directly.
+	 * commands. This function is completely pure: it performs no I/O and triggers
+	 * no side commands directly.
 	 *
 	 * Responsibilities:
 	 * - Define all valid state transitions
-	 * - Declare any effects that should occur as a result of a transition
+	 * - Declare any commands that should occur as a result of a transition
 	 * - Preserve exhaustiveness and protocol correctness via `matchStrict`
 	 */
 
@@ -182,7 +246,7 @@
 					remoteFetchStatus: { kind: 'Loading' },
 					cats: model.cats,
 				},
-				effects: [
+				commands: [
 					{ kind: 'LogInfo', message: 'User clicked Get New Cat' },
 					{ kind: 'FetchCat' },
 				],
@@ -193,7 +257,7 @@
 					remoteFetchStatus: { kind: 'Success' },
 					cats: [...model.cats, ...cats],
 				},
-				effects: [
+				commands: [
 					{ kind: 'LogInfo', message: `Cats loaded: ${JSON.stringify(cats)}` },
 				],
 			}),
@@ -203,7 +267,7 @@
 					remoteFetchStatus: { kind: 'Failure', error },
 					cats: model.cats,
 				},
-				effects: [{ kind: 'LogError', message: `Cats failed to load: ${error}` }],
+				commands: [{ kind: 'LogError', message: `Cats failed to load: ${error}` }],
 			}),
 
 			UserClickedRemoveLast: () => ({
@@ -211,7 +275,7 @@
 					remoteFetchStatus: model.remoteFetchStatus,
 					cats: model.cats.slice(0, -1),
 				},
-				effects: [],
+				commands: [],
 			}),
 
 			UserClickedRemoveAll: () => ({
@@ -219,33 +283,33 @@
 					remoteFetchStatus: model.remoteFetchStatus,
 					cats: [],
 				},
-				effects: [],
+				commands: [],
 			}),
 		})
 
 	// MESSAGE EXECUTION ----------------------------------------------------------
 
 	/**
-	 * Central message executor and effect coordinator.
+	 * Central message executor and command coordinator.
 	 *
 	 * Orchestrates the unidirectional flow:
 	 *
-	 *   Msg → Transition → Model Commit → Effect Interpreter
+	 *   Msg → Transition → Model Commit → Command Interpreter
 	 *
 	 * This function applies the pure transition, commits the resulting model as
-	 * the new application state, then executes each declared effect through the
-	 * effect interpreter.
+	 * the new application state, then executes each declared command through the
+	 * command interpreter.
 	 *
 	 * This structure cleanly separates pure decision-making from impure
 	 * execution while preserving finite state machine guarantees.
 	 */
 
 	const handleMessage = (msg: Msg): void => {
-		const { model: nextModel, effects } = transition(msg)
+		const { model: nextModel, commands } = transition(msg)
 
 		model = nextModel
 
-		effects.forEach(runEffect)
+		commands.forEach(runCommand)
 	}
 
 	// MODEL (STATE) --------------------------------------------------------------
@@ -276,15 +340,15 @@
 
 	// Derived values
 
-	let isLoading = $derived(model.remoteFetchStatus.kind === 'Loading')
+	let catsCount: number = $derived(model.cats.length)
 
-	let numberOfCats = $derived(model.cats.length)
+	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
 
-	let isNoCats = $derived(numberOfCats === 0)
+	let isFailure: boolean = $derived(model.remoteFetchStatus.kind === 'Failure')
 
-	let isFailure = $derived(model.remoteFetchStatus.kind === 'Failure')
+	let isNoCats: boolean = $derived(catsCount === 0)
 
-	let catRequestMessage = $derived<string | null>(
+	let catRequestMessage: string | null = $derived(
 		matchStrict(model.remoteFetchStatus, {
 			Idle: () => null,
 			Loading: () => 'Loading a new cat...',
@@ -293,7 +357,19 @@
 		})
 	)
 
-	$inspect(model)
+	// Activate subscriptions
+	$effect(() => {
+		const activeSubscriptions = subscriptions(model).map(runSubscription)
+
+		// Cleanup when the command is torn down
+		return () => {
+			activeSubscriptions.forEach(unsubscribe => {
+				unsubscribe()
+			})
+		}
+	})
+
+	$inspect('New model: \n', model)
 </script>
 
 <!-- VIEW --------------------------------------------------------------------->
@@ -340,7 +416,7 @@
 					Remove All
 				</button>
 
-				<div>Number of Cats: {numberOfCats}</div>
+				<div>Number of Cats: {catsCount}</div>
 
 				<div class:text-red-600={isFailure}>
 					{#if isFailure}
