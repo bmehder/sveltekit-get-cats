@@ -5,8 +5,9 @@
 	 * This application follows a unidirectional data flow inspired by The Elm Architecture:
 	 *   View → Msg → Transition → Model → View
 	 *
-	 * All side effects are modeled as typed data (`Effect`) and executed exclusively by a
-	 * central interpreter (`runEffect`), keeping state transitions pure and deterministic.
+	 * All side effects are modeled as typed data (`Effect`) and executed
+	 * exclusively by a central interpreter (`runEffect`), keeping state
+	 * transitions pure and deterministic.
 	 */
 
 	// IMPORTS ---------------------------------------------------------------------
@@ -33,7 +34,8 @@
 	 */
 
 	const CatSchema = z.object({
-		url: z.url(),
+		id: z.string().min(3),
+		url: z.httpUrl().min(41).max(50),
 	})
 
 	const CatsResponseSchema = z.array(CatSchema)
@@ -97,6 +99,38 @@
 		effects: Effect[]
 	}
 
+	// EFFECT IMPLEMENTATION ------------------------------------------------------
+
+	/**
+	 * Concrete implementation of the `FetchCat` effect.
+	 *
+	 * This function performs the actual HTTP request and feeds the resulting
+	 * outcome back into the system by emitting new messages via `handleMessage`.
+	 *
+	 * This function is intentionally impure and lives strictly within the
+	 * effect layer.
+	 */
+
+	const getNewCat = (): Promise<void> =>
+		fetch('https://api.thecatapi.com/v1/images/search')
+			.then(response => response.json())
+			.then(json => {
+				const { success, data, error } = CatsResponseSchema.safeParse(json)
+
+				success
+					? handleMessage({
+							kind: 'CatsLoaded',
+							cats: data,
+						})
+					: handleMessage({
+							kind: 'CatsFailedToLoad',
+							error: error.message,
+						})
+			})
+			.catch(err => {
+				handleMessage({ kind: 'CatsFailedToLoad', error: String(err) })
+			})
+
 	// EFFECT INTERPRETER ---------------------------------------------------------
 	/**
 	 * Central effect interpreter.
@@ -125,84 +159,6 @@
 				console.error(message)
 			},
 		})
-
-	// MODEL (STATE) --------------------------------------------------------------
-
-	/**
-	 * Application model (state).
-	 *
-	 * The model represents the complete, authoritative snapshot of the
-	 * application’s state at any point in time. It is the single source of truth
-	 * from which all rendering and derived values flow.
-	 *
-	 * Responsibilities:
-	 * - Hold the current domain data
-	 * - Reflect the current remote/request lifecycle state
-	 * - Serve as the input to all derived computations and rendering
-	 *
-	 * By centralizing state in an explicit model, the system gains predictability,
-	 * easier reasoning about behavior, and a clear separation between data,
-	 * transitions, and presentation.
-	 */
-
-	// Explicit state
-
-	let model = $state<Model>({
-		remoteFetchStatus: { kind: 'Idle' },
-		cats: [],
-	})
-
-	// Derived values
-
-	let isLoading = $derived(model.remoteFetchStatus.kind === 'Loading')
-
-	let isNoCats = $derived(model.cats.length === 0)
-
-	let isFailure = $derived(model.remoteFetchStatus.kind === 'Failure')
-
-	let numberOfCats = $derived(model.cats.length)
-
-	let catRequestMessage = $derived<string | null>(
-		matchStrict(model.remoteFetchStatus, {
-			Idle: () => null,
-			Loading: () => 'Loading a new cat...',
-			Failure: ({ error }) => error,
-			Success: () => null,
-		})
-	)
-
-	// EFFECT IMPLEMENTATION ------------------------------------------------------
-
-	/**
-	 * Concrete implementation of the `FetchCat` effect.
-	 *
-	 * This function performs the actual HTTP request, logs raw and parsed
-	 * responses, and feeds the resulting outcome back into the system by
-	 * emitting new messages via `handleMessage`.
-	 *
-	 * This function is intentionally impure and lives strictly within the
-	 * effect layer.
-	 */
-
-	const getNewCat = (): Promise<void> =>
-		fetch('https://api.thecatapi.com/v1/images/search')
-			.then(response => response.json())
-			.then(json => {
-				const { success, data } = CatsResponseSchema.safeParse(json)
-
-				success
-					? handleMessage({
-							kind: 'CatsLoaded',
-							cats: data,
-						})
-					: handleMessage({
-							kind: 'CatsFailedToLoad',
-							error: 'API response failed validation.',
-						})
-			})
-			.catch(err => {
-				handleMessage({ kind: 'CatsFailedToLoad', error: String(err) })
-			})
 
 	// TRANSITIONS ---------------------------------------------------------------
 
@@ -237,7 +193,9 @@
 					remoteFetchStatus: { kind: 'Success' },
 					cats: [...model.cats, ...cats],
 				},
-				effects: [{ kind: 'LogInfo', message: `Cats loaded: ${cats.length}` }],
+				effects: [
+					{ kind: 'LogInfo', message: `Cats loaded: ${JSON.stringify(cats)}` },
+				],
 			}),
 
 			CatsFailedToLoad: ({ error }) => ({
@@ -266,7 +224,7 @@
 		})
 
 	// MESSAGE EXECUTION ----------------------------------------------------------
-	
+
 	/**
 	 * Central message executor and effect coordinator.
 	 *
@@ -290,6 +248,51 @@
 		effects.forEach(runEffect)
 	}
 
+	// MODEL (STATE) --------------------------------------------------------------
+
+	/**
+	 * Application model (state).
+	 *
+	 * The model represents the complete, authoritative snapshot of the
+	 * application’s state at any point in time. It is the single source of truth
+	 * from which all rendering and derived values flow.
+	 *
+	 * Responsibilities:
+	 * - Hold the current domain data
+	 * - Reflect the current remote/request lifecycle state
+	 * - Serve as the input to all derived computations and rendering
+	 *
+	 * By centralizing state in an explicit model, the system gains predictability,
+	 * easier reasoning about behavior, and a clear separation between data,
+	 * transitions, and presentation.
+	 */
+
+	// Explicit state
+
+	let model = $state<Model>({
+		remoteFetchStatus: { kind: 'Idle' },
+		cats: [],
+	})
+
+	// Derived values
+
+	let isLoading = $derived(model.remoteFetchStatus.kind === 'Loading')
+
+	let numberOfCats = $derived(model.cats.length)
+
+	let isNoCats = $derived(numberOfCats === 0)
+
+	let isFailure = $derived(model.remoteFetchStatus.kind === 'Failure')
+
+	let catRequestMessage = $derived<string | null>(
+		matchStrict(model.remoteFetchStatus, {
+			Idle: () => null,
+			Loading: () => 'Loading a new cat...',
+			Failure: ({ error }) => error,
+			Success: () => null,
+		})
+	)
+
 	$inspect(model)
 </script>
 
@@ -301,9 +304,10 @@
 			<div class="grid auto-fill gap-1">
 				{#each model.cats as cat}
 					<img
+						id={cat.id}
 						class="aspect-square object-cover rounded-lg"
 						src={cat.url}
-						alt="cat"
+						alt="random cat"
 					/>
 				{/each}
 			</div>
@@ -339,7 +343,11 @@
 				<div>Number of Cats: {numberOfCats}</div>
 
 				<div class:text-red-600={isFailure}>
-					{catRequestMessage}
+					{#if isFailure}
+						<pre>{catRequestMessage}</pre>
+					{:else}
+						<p>{catRequestMessage}</p>
+					{/if}
 				</div>
 			</div>
 		</div>
