@@ -28,7 +28,7 @@
 
 	// In this naive version, state is spread across independent variables.
 	// There is no single source of truth or modeled state machine, which
-	// makes it harder to reason about valid vs invalid states. Is essentially 
+	// makes it harder to reason about valid vs invalid states. It essentially 
 	// treats a component as an object encapsulating state and functions (methods).
 
 	let cats: Cat[] = $state([])
@@ -90,20 +90,17 @@
 
 	// A direct DOM subscription without a formal subscription model
 	// and without a centralized lifecycle manager.
-	
+
 	// This works, but it is an ad-hoc subscription. There is no centralized
 	// subscription model, no cleanup lifecycle, and no typing around which
 	// messages keyboard events produce. The TEA version models subscriptions
 	// explicitly and cleans them up automatically.
 
-	const handleKeydown = (event: KeyboardEvent) => {
-		if (event.key === 'c') {
-			getNewCat()
-		}
-
-		if (event.key === 'd') {
-			removeLast()
-		}
+		// Event handlers
+	const handleKeydown = (event: KeyboardEvent): void => {
+		event.key === 'c' && getNewCat()
+		event.key === 'd' && removeLast()
+		event.key === 'D' && removeAll()
 	}
 
 	// NOTE: This listener is never cleaned up
