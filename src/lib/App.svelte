@@ -18,9 +18,9 @@
 		cats: Cat[]
 	}
 
-	type Transition = {
-		model: Model
-		commands: Cmd[]
+	type NextModelAndCommands = {
+		nextModel: Model
+		nextCommands: Cmd[]
 	}
 
 	// ADTs
@@ -43,52 +43,51 @@
 		| { kind: 'LogInfo'; message: string }
 		| { kind: 'LogError'; message: string }
 
-	// Transition Interpreter
-	const transition = (msg: Msg): Transition =>
+	const computeNextModelAndCommands = (msg: Msg): NextModelAndCommands =>
 		matchStrict(msg, {
 			UserClickedGetNewCat: () => ({
-				model: {
+				nextModel: {
 					remoteFetchStatus: { kind: 'Loading' },
 					cats: model.cats,
 				},
-				commands: [
+				nextCommands: [
 					{ kind: 'LogInfo', message: 'User clicked Get New Cat' },
 					{ kind: 'FetchCat' },
 				],
 			}),
 
 			CatsLoaded: ({ cats }) => ({
-				model: {
+				nextModel: {
 					remoteFetchStatus: { kind: 'Success' },
 					cats: [...model.cats, ...cats],
 				},
-				commands: [
+				nextCommands: [
 					{ kind: 'LogInfo', message: `Cats loaded: ${JSON.stringify(cats)}` },
 				],
 			}),
 
 			CatsFailedToLoad: ({ error }) => ({
-				model: {
+				nextModel: {
 					remoteFetchStatus: { kind: 'Failure', error },
 					cats: model.cats,
 				},
-				commands: [{ kind: 'LogError', message: `Cats failed to load: ${error}` }],
+				nextCommands: [{ kind: 'LogError', message: `Cats failed to load: ${error}` }],
 			}),
 
 			UserClickedRemoveLast: () => ({
-				model: {
+				nextModel: {
 					remoteFetchStatus: model.remoteFetchStatus,
 					cats: model.cats.slice(0, -1),
 				},
-				commands: [],
+				nextCommands: [],
 			}),
 
 			UserClickedRemoveAll: () => ({
-				model: {
+				nextModel: {
 					remoteFetchStatus: model.remoteFetchStatus,
 					cats: [],
 				},
-				commands: [],
+				nextCommands: [],
 			}),
 
 			UserPressedKey: ({ key }) =>
@@ -96,35 +95,34 @@
 					{ kind: key },
 					{
 						c: () => ({
-							model: { remoteFetchStatus: { kind: 'Loading' }, cats: model.cats },
-							commands: [
+							nextModel: { remoteFetchStatus: { kind: 'Loading' }, cats: model.cats },
+							nextCommands: [
 								{ kind: 'LogInfo', message: 'User pressed c' },
 								{ kind: 'FetchCat' },
 							],
 						}),
 
 						d: () => ({
-							model: {
+							nextModel: {
 								remoteFetchStatus: model.remoteFetchStatus,
 								cats: model.cats.slice(0, -1),
 							},
-							commands: [{ kind: 'LogInfo', message: 'User pressed d' }],
+							nextCommands: [{ kind: 'LogInfo', message: 'User pressed d' }],
 						}),
 
 						D: () => ({
-							model: {
+							nextModel: {
 								remoteFetchStatus: model.remoteFetchStatus,
 								cats: [],
 							},
-							commands: [{ kind: 'LogInfo', message: 'User pressed shift + d' }],
+							nextCommands: [{ kind: 'LogInfo', message: 'User pressed shift + d' }],
 						}),
 					}
 				),
 		})
 
-	// Command Interpreter
-	const handleCommand = (command: Cmd): void =>
-		matchStrict(command, {
+	const executeCommand = (cmd: Cmd): void =>
+		matchStrict(cmd, {
 			FetchCat: () =>
 				fetch('https://api.thecatapi.com/v1/images/search')
 					.then(response => response.json())
@@ -132,17 +130,17 @@
 						const { success, data, error } = CatsSchema.safeParse(json)
 
 						success
-							? handleMessage({
+							? processMessage({
 									kind: 'CatsLoaded',
 									cats: data,
 								})
-							: handleMessage({
+							: processMessage({
 									kind: 'CatsFailedToLoad',
 									error: error.message,
 								})
 					})
 					.catch(err => {
-						handleMessage({ kind: 'CatsFailedToLoad', error: String(err) })
+						processMessage({ kind: 'CatsFailedToLoad', error: String(err) })
 					}),
 
 			LogInfo: ({ message }) => {
@@ -154,13 +152,12 @@
 			},
 		})
 
-	// Message Interpreter
-	const handleMessage = (msg: Msg): void => {
-		const { model: nextModel, commands } = transition(msg)
+	const processMessage = (msg: Msg): void => {
+		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
 
 		model = nextModel
 
-		commands.forEach(handleCommand)
+		nextCommands.forEach(executeCommand)
 	}
 
 	// Explicit state
@@ -187,13 +184,14 @@
 		})
 	)
 
+	// Smart Logger
 	$inspect('New model: \n', model)
 </script>
 
 <svelte:window
 	onkeydown={({ key }) => {
 		;['c', 'd', 'D'].includes(key) &&
-			handleMessage({ kind: 'UserPressedKey', key: key as 'c' | 'd' | 'D' })
+			processMessage({ kind: 'UserPressedKey', key: key as 'c' | 'd' | 'D' })
 	}}
 />
 
@@ -219,21 +217,21 @@
 		<div class="inner" style="--inner-padding-block: 0;">
 			<div class="flex flex-wrap items-center gap-0-5">
 				<button
-					onclick={() => handleMessage({ kind: 'UserClickedGetNewCat' })}
+					onclick={() => processMessage({ kind: 'UserClickedGetNewCat' })}
 					disabled={isLoading}
 				>
 					Get New Cat
 				</button>
 
 				<button
-					onclick={() => handleMessage({ kind: 'UserClickedRemoveLast' })}
+					onclick={() => processMessage({ kind: 'UserClickedRemoveLast' })}
 					disabled={isLoading || isNoCats}
 				>
 					Remove Last
 				</button>
 
 				<button
-					onclick={() => handleMessage({ kind: 'UserClickedRemoveAll' })}
+					onclick={() => processMessage({ kind: 'UserClickedRemoveAll' })}
 					disabled={isLoading || isNoCats}
 				>
 					Remove All
