@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { z } from 'zod'
-	import { matchStrict } from 'canary-js'
+	import { match, matchStrict } from 'canary-js'
 
 	// Validation Schemas
 	const CatSchema = z.object({
@@ -42,10 +42,9 @@
 		| { kind: 'CatsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
-		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
-		| { kind: 'Undo' }
-		| { kind: 'Redo' }
+		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' | 'z' | 'x' }
 		| { kind: 'JumpTo'; index: number }
+		| { kind: 'Noop' }
 
 	type Cmd =
 		| { kind: 'FetchCat' }
@@ -131,24 +130,24 @@
 							},
 							nextCommands: [{ kind: 'LogInfo', message: 'User pressed shift + d' }],
 						}),
+
+						z: () =>
+							timeline.past.length === 0
+								? { nextModel: timeline.present, nextCommands: [] }
+								: {
+										nextModel: timeline.past[timeline.past.length - 1],
+										nextCommands: [],
+									},
+
+						x: () =>
+							timeline.future.length === 0
+								? { nextModel: timeline.present, nextCommands: [] }
+								: {
+										nextModel: timeline.future[0],
+										nextCommands: [],
+									},
 					}
 				),
-
-			Undo: () =>
-				timeline.past.length === 0
-					? { nextModel: timeline.present, nextCommands: [] }
-					: {
-							nextModel: timeline.past[timeline.past.length - 1],
-							nextCommands: [],
-						},
-
-			Redo: () =>
-				timeline.future.length === 0
-					? { nextModel: timeline.present, nextCommands: [] }
-					: {
-							nextModel: timeline.future[0],
-							nextCommands: [],
-						},
 
 			JumpTo: ({ index }) => {
 				const all = [...timeline.past, timeline.present, ...timeline.future]
@@ -159,6 +158,14 @@
 					nextCommands: [],
 				}
 			},
+
+			Noop: () => ({
+				nextModel: {
+					remoteFetchStatus: { kind: 'Idle' },
+					cats: model.cats,
+				},
+				nextCommands: [],
+			}),
 		})
 
 	const executeCommand = (cmd: Cmd): void =>
@@ -197,14 +204,21 @@
 
 		const all = [...timeline.past, timeline.present, ...timeline.future]
 
-		const index =
-			msg.kind === 'JumpTo'
-				? msg.index
-				: msg.kind === 'Undo'
-					? timeline.past.length - 1
-					: msg.kind === 'Redo'
-						? timeline.past.length + 1
-						: timeline.past.length + 1
+		const index = match(msg, {
+			JumpTo: ({ index }) => index,
+
+			UserPressedKey: ({ key }) =>
+				match(
+					{ kind: key },
+					{
+						z: () => timeline.past.length - 1,
+						x: () => timeline.past.length + 1,
+						_: () => timeline.past.length + 1,
+					}
+				),
+
+			_: () => timeline.past.length + 1,
+		})
 
 		timeline = {
 			past: all.slice(0, index),
@@ -245,8 +259,8 @@
 		})
 	)
 
-	let timelineIndex = $derived(timeline.past.length)
-	let timelineLength = $derived(
+	let timelineIndex: number = $derived(timeline.past.length)
+	let timelineLength: number = $derived(
 		timeline.past.length + 1 + timeline.future.length
 	)
 
@@ -255,17 +269,18 @@
 </script>
 
 <svelte:window
-	onkeydown={({ key }) => {
-		if (['c', 'd', 'D', 'z', 'x'].includes(key)) {
-			if (key === 'z') {
-				processMessage({ kind: 'Undo' })
-			} else if (key === 'x') {
-				processMessage({ kind: 'Redo' })
-			} else {
-				processMessage({ kind: 'UserPressedKey', key: key as 'c' | 'd' | 'D' })
+	onkeydown={({ key }) =>
+		match(
+			{ kind: key },
+			{
+				z: () => processMessage({ kind: 'UserPressedKey', key: 'z' }),
+				x: () => processMessage({ kind: 'UserPressedKey', key: 'x' }),
+				c: () => processMessage({ kind: 'UserPressedKey', key: 'c' }),
+				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
+				D: () => processMessage({ kind: 'UserPressedKey', key: 'D' }),
+				_: () => processMessage({ kind: 'Noop' }),
 			}
-		}
-	}}
+		)}
 />
 
 <section>
@@ -335,12 +350,11 @@
 						min="0"
 						max={timelineLength - 1}
 						value={timelineIndex}
-						oninput={(e) =>
+						oninput={({ target }) =>
 							processMessage({
 								kind: 'JumpTo',
-								index: Number((e.target as HTMLInputElement).value),
-							})
-						}
+								index: Number((target as HTMLInputElement).value),
+							})}
 					/>
 				</label>
 			</div>
