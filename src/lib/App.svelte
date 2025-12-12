@@ -245,9 +245,6 @@
 		})
 	)
 
-	let canUndo = $derived(timeline.past.length > 0)
-	let canRedo = $derived(timeline.future.length > 0)
-
 	let timelineIndex = $derived(timeline.past.length)
 	let timelineLength = $derived(
 		timeline.past.length + 1 + timeline.future.length
@@ -259,10 +256,10 @@
 
 <svelte:window
 	onkeydown={({ key }) => {
-		if (['c', 'd', 'D', 'z', 'y'].includes(key)) {
+		if (['c', 'd', 'D', 'z', 'x'].includes(key)) {
 			if (key === 'z') {
 				processMessage({ kind: 'Undo' })
-			} else if (key === 'y') {
+			} else if (key === 'x') {
 				processMessage({ kind: 'Redo' })
 			} else {
 				processMessage({ kind: 'UserPressedKey', key: key as 'c' | 'd' | 'D' })
