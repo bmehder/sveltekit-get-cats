@@ -20,7 +20,7 @@ This project is intentionally minimal and architectural in nature. It is less ab
 This app models application behavior using a small set of concepts:
 
 1. **Validation Schemas** – Zod schemas define the runtime shape of external data (the cat API) and give you inferred TypeScript types.
-2. **Types** – `Model`, `Msg`, `Cmd`, and the “next step” type all describe the structural and behavioral protocol of the app.
+2. **Types** – `Model`, `Msg`, `Cmd`, and the `NextModelAndCommands` type all describe the structural and behavioral protocol of the app.
 3. **Model (State)** – A single, explicit source of truth for the UI.
 4. **Unidirectional Message Handling & Commands** – All state changes flow in one direction:  
    **view → message → next-model-and-commands → model → derived state → view**,  
@@ -91,7 +91,7 @@ The interpreter for these commands is an impure function such as:
 
 ```ts
 const executeSideEffect = (cmd: Cmd): void => {
-  // switch on cmd.kind and perform the effect
+  // match on cmd.kind and perform the effect
 }
 ```
 
@@ -101,7 +101,7 @@ This function is the only place where network requests, logging, and other side 
 
 ## Keyboard Shortcuts (Lightweight “Subscriptions”)
 
-Earlier versions of this project modeled **subscriptions** as their own typed ADT. That worked, but added more ceremony than was helpful for such a small app.
+Earlier versions of this project modeled **subscriptions** as their own typed ADT. That worked, but added more ceremony than was helpful.
 
 The current approach keeps the idea of **“external events become messages”** but implements it in a simpler way using Svelte:
 
@@ -122,8 +122,6 @@ View (clicks / key presses)
 ```
 
 But instead of a full `Subscription` ADT, we rely on Svelte’s built‑in event system plus our message API.
-
-If you wanted to, you could reintroduce a `Subscription` type and a `runSubscription` interpreter, but the current implementation intentionally favors simplicity over abstraction.
 
 ---
 

@@ -18,6 +18,12 @@
 		cats: Cat[]
 	}
 
+	type Timeline = {
+		past: Model[]
+		present: Model
+		future: Model[]
+	}
+
 	type NextModelAndCommands = {
 		nextModel: Model
 		nextCommands: Cmd[]
@@ -37,6 +43,9 @@
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
 		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
+		| { kind: 'Undo' }
+		| { kind: 'Redo' }
+		| { kind: 'JumpTo'; index: number }
 
 	type Cmd =
 		| { kind: 'FetchCat' }
@@ -71,7 +80,9 @@
 					remoteFetchStatus: { kind: 'Failure', error },
 					cats: model.cats,
 				},
-				nextCommands: [{ kind: 'LogError', message: `Cats failed to load: ${error}` }],
+				nextCommands: [
+					{ kind: 'LogError', message: `Cats failed to load: ${error}` },
+				],
 			}),
 
 			UserClickedRemoveLast: () => ({
@@ -95,7 +106,10 @@
 					{ kind: key },
 					{
 						c: () => ({
-							nextModel: { remoteFetchStatus: { kind: 'Loading' }, cats: model.cats },
+							nextModel: {
+								remoteFetchStatus: { kind: 'Loading' },
+								cats: model.cats,
+							},
 							nextCommands: [
 								{ kind: 'LogInfo', message: 'User pressed c' },
 								{ kind: 'FetchCat' },
@@ -119,6 +133,32 @@
 						}),
 					}
 				),
+
+			Undo: () =>
+				timeline.past.length === 0
+					? { nextModel: timeline.present, nextCommands: [] }
+					: {
+							nextModel: timeline.past[timeline.past.length - 1],
+							nextCommands: [],
+						},
+
+			Redo: () =>
+				timeline.future.length === 0
+					? { nextModel: timeline.present, nextCommands: [] }
+					: {
+							nextModel: timeline.future[0],
+							nextCommands: [],
+						},
+
+			JumpTo: ({ index }) => {
+				const all = [...timeline.past, timeline.present, ...timeline.future]
+				const clamped = Math.max(0, Math.min(index, all.length - 1))
+
+				return {
+					nextModel: all[clamped],
+					nextCommands: [],
+				}
+			},
 		})
 
 	const executeCommand = (cmd: Cmd): void =>
@@ -155,18 +195,39 @@
 	const processMessage = (msg: Msg): void => {
 		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
 
-		model = nextModel
+		const all = [...timeline.past, timeline.present, ...timeline.future]
+
+		const index =
+			msg.kind === 'JumpTo'
+				? msg.index
+				: msg.kind === 'Undo'
+					? timeline.past.length - 1
+					: msg.kind === 'Redo'
+						? timeline.past.length + 1
+						: timeline.past.length + 1
+
+		timeline = {
+			past: all.slice(0, index),
+			present: nextModel,
+			future: all.slice(index + 1),
+		}
 
 		nextCommands.forEach(executeCommand)
 	}
 
 	// Explicit state
-	let model = $state<Model>({
-		remoteFetchStatus: { kind: 'Idle' },
-		cats: [],
+	let timeline = $state<Timeline>({
+		past: [],
+		present: {
+			remoteFetchStatus: { kind: 'Idle' },
+			cats: [],
+		},
+		future: [],
 	})
 
 	// Derived values
+	let model: Model = $derived(timeline.present)
+
 	let catsCount: number = $derived(model.cats.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
@@ -184,14 +245,29 @@
 		})
 	)
 
+	let canUndo = $derived(timeline.past.length > 0)
+	let canRedo = $derived(timeline.future.length > 0)
+
+	let timelineIndex = $derived(timeline.past.length)
+	let timelineLength = $derived(
+		timeline.past.length + 1 + timeline.future.length
+	)
+
 	// Smart Logger
 	$inspect('New model: \n', model)
 </script>
 
 <svelte:window
 	onkeydown={({ key }) => {
-		;['c', 'd', 'D'].includes(key) &&
-			processMessage({ kind: 'UserPressedKey', key: key as 'c' | 'd' | 'D' })
+		if (['c', 'd', 'D', 'z', 'y'].includes(key)) {
+			if (key === 'z') {
+				processMessage({ kind: 'Undo' })
+			} else if (key === 'y') {
+				processMessage({ kind: 'Redo' })
+			} else {
+				processMessage({ kind: 'UserPressedKey', key: key as 'c' | 'd' | 'D' })
+			}
+		}
 	}}
 />
 
@@ -246,6 +322,30 @@
 						<p>{catRequestMessage}</p>
 					{/if}
 				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="outer">
+		<div class="inner">
+			<div class="content">
+				<label>
+					Timeline
+					<input
+						type="range"
+						min="0"
+						max={timelineLength - 1}
+						value={timelineIndex}
+						oninput={(e) =>
+							processMessage({
+								kind: 'JumpTo',
+								index: Number((e.target as HTMLInputElement).value),
+							})
+						}
+					/>
+				</label>
 			</div>
 		</div>
 	</div>
