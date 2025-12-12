@@ -1,6 +1,6 @@
 # SvelteKit Get Cats
 
-This architecture embraces a pure function approach inspired by Elm and other functional state machines. The entire logic is expressed as schemas, types, algebraic data types (ADTs), and pure functions: `computeNextModelAndCommands`, `executeCommand`, and `processMessage`. The design eliminates nullish checks, avoids control-flow statements (except one `if` in the view), and centralizes all side effects into a single interpreter. This separation ensures predictable state transitions, unidirectional data flow, and maintains clear boundaries between model evolution and commands that interact with the external world.
+This architecture embraces a pure function approach inspired by Elm and other functional state machines, extended with explicit time travel. The entire logic is expressed as schemas, types, algebraic data types (ADTs), and pure functions: `computeNextModelAndCommands`, `executeCommand`, and `processMessage`. State is modeled as a timeline (`past / present / future`), enabling undo, redo, and scrubbing without replaying side effects. The design eliminates nullish checks, avoids control-flow statements (except one `if` in the view), and centralizes all side effects into a single interpreter.
 
 A small demonstration app built with SvelteKit that explores:
 
@@ -10,6 +10,8 @@ A small demonstration app built with SvelteKit that explores:
 - Runtime validation with Zod
 - Derived state as pure projections
 - Explicit commands for side effects
+- Time travel via explicit state timelines
+- Deterministic undo / redo and timeline scrubbing
 
 This project is intentionally minimal and architectural in nature. It is less about features and more about **making state transitions explicit, predictable, and safe**.
 
@@ -71,7 +73,7 @@ All valid messages are defined as a discriminated union (`Msg`), and pattern mat
 
 ---
 
-## Commands (Side Effects)
+## Commands (Explicit Side Effects)
 
 Side effects are modeled as a small `Cmd` union, for example:
 
@@ -99,29 +101,46 @@ This function is the only place where network requests, logging, and other side 
 
 ---
 
-## Keyboard Shortcuts (Lightweight “Subscriptions”)
+## Time Travel & Timeline
 
-Earlier versions of this project modeled **subscriptions** as their own typed ADT. That worked, but added more ceremony than was helpful.
+Instead of storing a single model value, the app stores state as a timeline:
 
-The current approach keeps the idea of **“external events become messages”** but implements it in a simpler way using Svelte:
-
-- `<svelte:window onkeydown={...} />` listens for keyboard events
-- Relevant key presses (`c`, `d`, `Shift+D`) are turned into `Msg` values
-- Those messages are passed into the same message pipeline as button clicks
-
-Conceptually this still fits the Elm-style loop:
-
-```
-View (clicks / key presses)
-  → Msg
-  → computeNextModelAndCommands
-  → Model
-  → View
-           ↓
-        Commands
+```ts
+type Timeline = {
+  past: Model[]
+  present: Model
+  future: Model[]
+}
 ```
 
-But instead of a full `Subscription` ADT, we rely on Svelte’s built‑in event system plus our message API.
+All state transitions move the timeline forward by pushing the current model into `past` and clearing `future`. Undo, redo, and timeline scrubbing are modeled as messages that rearrange the timeline without producing commands.
+
+Crucially:
+
+- **Only models are stored in the timeline**
+- **Commands are never replayed**
+- **Side effects only occur when handling forward messages**
+
+This separation allows time travel, undo/redo, and debugging without accidentally re-running network requests or other effects.
+
+---
+
+## External Events as Messages
+
+User interactions (button clicks and keyboard events) are treated uniformly as messages.
+
+For example:
+
+- Clicking a button dispatches a message
+- Pressing a key dispatches a `{ kind: 'UserPressedKey', key }` message
+
+All messages—regardless of origin—flow through the same pipeline:
+
+```
+Event → Msg → computeNextModelAndCommands → Model → View
+```
+
+The meaning of a key press (e.g. fetching a cat, removing one, undoing, redoing) is determined exclusively inside the pure transition function. This keeps input handling declarative and avoids spreading logic across event handlers.
 
 ---
 
@@ -176,6 +195,77 @@ This project is deployed via Vercel using the standard SvelteKit adapter.
 
 ---
 
+### Why Commands Instead of `$effect`
+
+Svelte’s `$effect` rune is excellent for DOM and integration concerns, but it re-runs when reactive state changes. That makes it unsuitable for domain-level side effects in a time-traveling architecture.
+
+In this project, side effects are triggered by **messages**, not by **state changes**. This ensures that undoing, redoing, or scrubbing the timeline never replays network requests or logs. Effects happen once, at the moment a message is handled, and are never inferred from state alone.
+
+---
+
+
+## Timeline Mental Model (DAW Metaphor)
+
+A helpful way to visualize this architecture is as a multi-track timeline, similar to a digital audio workstation (DAW):
+
+```
+MODEL TRACK (scrubbable)
+| M0 | M1 | M2 | M3 | M4 |
+              ▲
+           playhead
+
+COMMAND TRACK (live only)
+|    |    | F  |    |
+```
+
+- Each `Mi` is a complete, immutable snapshot of the `Model`.
+- The playhead represents the current `present` model.
+- Scrubbing the playhead (undo, redo, or range input) moves across model snapshots.
+- Commands (effects) live on a separate track and are **not replayed**.
+
+Only the model track is time-travelable. The command track runs once, in real time, when a message is handled.
+
+## Why This Isn’t Redux or Elm
+
+This architecture borrows ideas from both Redux and Elm, but it is intentionally neither.
+
+**Not Redux**
+- There is no global store or reducer tree.
+- There is no implicit subscription mechanism.
+- Side effects are not driven by middleware or state observation.
+- Time travel works because effects are modeled explicitly, not inferred.
+
+**Not Elm**
+- This runs inside SvelteKit and embraces local component state.
+- There is no separate runtime or virtual DOM.
+- Commands are interpreted imperatively rather than by a framework-managed runtime.
+- Subscriptions are handled explicitly via browser events, not a formal subscription system.
+
+The goal is not to reimplement another framework, but to apply the *useful constraints* of TEA in a lightweight, idiomatic Svelte context.
+
+## Where This Breaks Down
+
+This approach is intentionally explicit and opinionated, and it is not a universal solution.
+
+Some tradeoffs to be aware of:
+
+- The architecture is more verbose than idiomatic Svelte for small, simple components.
+- Modeling everything as messages and commands can feel heavy for purely local UI interactions.
+- Long-lived or highly dynamic subscriptions (e.g. websockets, complex timers) would require additional structure.
+- This does not attempt to be a full framework or runtime—just a pattern.
+
+In other words, this architecture shines when:
+- State transitions matter
+- Side effects must be controlled
+- Debugging, replayability, or time travel are valuable
+
+And it may be overkill when:
+- State is trivial
+- Effects are incidental
+- The component is short-lived or purely presentational
+
+Being explicit about these limits helps keep the approach honest and practical.
+
 ## Notes
 
 This repo intentionally favors **clarity over abstraction**, **unidirectional flow over implicit coupling**, and **explicit commands over hidden side effects**. All major concepts (state, messages, transitions, commands, and simple event wiring) live close together to make the architecture easy to explore and reason about.
@@ -189,4 +279,4 @@ If you are interested in:
 
 …this project is meant to be a readable starting point.
 
-By making state transitions exhaustively typed and side effects explicit, the codebase is structured to encourage experimentation and confident change without fear of breaking hidden behavior (“fearless refactoring”).
+By making state transitions exhaustively typed, time-travel-safe, and side effects explicit, the codebase is structured to encourage experimentation and confident change without fear of breaking hidden behavior (“fearless refactoring”).
