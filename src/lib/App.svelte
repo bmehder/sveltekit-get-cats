@@ -1,11 +1,13 @@
 <script lang="ts">
+	// Philosophy: An app is a timeline of (state, commands) pairs.
+
 	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
 
 	// Validation Schemas
 	const CatSchema = z.object({
 		id: z.string().min(1),
-		url: z.httpUrl().min(41),
+		url: z.httpUrl().min(32),
 	})
 
 	const CatsSchema = z.array(CatSchema)
@@ -16,12 +18,6 @@
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
 		cats: Cat[]
-	}
-
-	type Timeline = {
-		past: Model[]
-		present: Model
-		future: Model[]
 	}
 
 	type NextModelAndCommands = {
@@ -42,9 +38,7 @@
 		| { kind: 'CatsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
-		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' | 'z' | 'Z' }
-		| { kind: 'JumpTo'; index: number }
-		| { kind: 'Noop' }
+		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
 
 	type Cmd =
 		| { kind: 'FetchCat' }
@@ -130,73 +124,14 @@
 							},
 							nextCommands: [{ kind: 'LogInfo', message: 'User pressed shift + d' }],
 						}),
-
-						z: () =>
-							timeline.past.length === 0
-								? { nextModel: timeline.present, nextCommands: [] }
-								: {
-										nextModel: timeline.past[timeline.past.length - 1],
-										nextCommands: [],
-									},
-
-						Z: () =>
-							timeline.future.length === 0
-								? { nextModel: timeline.present, nextCommands: [] }
-								: {
-										nextModel: timeline.future[0],
-										nextCommands: [],
-									},
 					}
 				),
-
-			JumpTo: ({ index }) => {
-				const all = [...timeline.past, timeline.present, ...timeline.future]
-				const clamped = Math.max(0, Math.min(index, all.length - 1))
-
-				return {
-					nextModel: all[clamped],
-					nextCommands: [],
-				}
-			},
-
-			Noop: () => ({
-				nextModel: {
-					remoteFetchStatus: { kind: 'Idle' },
-					cats: model.cats,
-				},
-				nextCommands: [],
-			}),
 		})
-
-	const commitNextModel = (msg: Msg, nextModel: Model): void => {
-		const all = [...timeline.past, timeline.present, ...timeline.future]
-
-		const index = match(msg, {
-			JumpTo: ({ index }) => index,
-
-			UserPressedKey: ({ key }) =>
-				match(
-					{ kind: key },
-					{
-						z: () => timeline.past.length - 1,
-						Z: () => timeline.past.length + 1,
-						_: () => timeline.past.length + 1,
-					}
-				),
-
-			_: () => timeline.past.length + 1,
-		})
-
-		timeline = {
-			past: all.slice(0, index),
-			present: nextModel,
-			future: all.slice(index + 1),
-		}
-	}
 
 	const processMessage = (msg: Msg): void => {
 		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
-		commitNextModel(msg, nextModel)
+
+		model = nextModel
 		nextCommands.forEach(executeCommand)
 	}
 
@@ -232,18 +167,13 @@
 		})
 
 	// Explicit state
-	let timeline = $state<Timeline>({
-		past: [],
-		present: {
-			remoteFetchStatus: { kind: 'Idle' },
-			cats: [],
-		},
-		future: [],
+	let model = $state<Model>({
+		remoteFetchStatus: { kind: 'Idle' },
+		cats: [],
 	})
+	
 
 	// Derived values
-	let model: Model = $derived(timeline.present)
-
 	let catsCount: number = $derived(model.cats.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
@@ -261,13 +191,8 @@
 		})
 	)
 
-	let timelineIndex: number = $derived(timeline.past.length)
-	let timelineLength: number = $derived(
-		timeline.past.length + 1 + timeline.future.length
-	)
-
 	// Smart Logger
-	$inspect('New model: \n', model)
+	// $inspect('New model: \n', model)
 </script>
 
 <svelte:window
@@ -275,8 +200,6 @@
 		match(
 			{ kind: key },
 			{
-				z: () => processMessage({ kind: 'UserPressedKey', key: 'z' }),
-				Z: () => processMessage({ kind: 'UserPressedKey', key: 'Z' }),
 				c: () => processMessage({ kind: 'UserPressedKey', key: 'c' }),
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
 				D: () => processMessage({ kind: 'UserPressedKey', key: 'D' }),
@@ -336,29 +259,6 @@
 						<p>{catRequestMessage}</p>
 					{/if}
 				</div>
-			</div>
-		</div>
-	</div>
-</section>
-
-<section>
-	<div class="outer">
-		<div class="inner">
-			<div class="content">
-				<label>
-					Timeline
-					<input
-						type="range"
-						min="0"
-						max={timelineLength - 1}
-						value={timelineIndex}
-						oninput={({ target }) =>
-							processMessage({
-								kind: 'JumpTo',
-								index: Number((target as HTMLInputElement).value),
-							})}
-					/>
-				</label>
 			</div>
 		</div>
 	</div>
