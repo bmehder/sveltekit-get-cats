@@ -168,6 +168,38 @@
 			}),
 		})
 
+	const commitNextModel = (msg: Msg, nextModel: Model): void => {
+		const all = [...timeline.past, timeline.present, ...timeline.future]
+
+		const index = match(msg, {
+			JumpTo: ({ index }) => index,
+
+			UserPressedKey: ({ key }) =>
+				match(
+					{ kind: key },
+					{
+						z: () => timeline.past.length - 1,
+						x: () => timeline.past.length + 1,
+						_: () => timeline.past.length + 1,
+					}
+				),
+
+			_: () => timeline.past.length + 1,
+		})
+
+		timeline = {
+			past: all.slice(0, index),
+			present: nextModel,
+			future: all.slice(index + 1),
+		}
+	}
+
+	const processMessage = (msg: Msg): void => {
+		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
+		commitNextModel(msg, nextModel)
+		nextCommands.forEach(executeCommand)
+	}
+
 	const executeCommand = (cmd: Cmd): void =>
 		matchStrict(cmd, {
 			FetchCat: () =>
@@ -198,36 +230,6 @@
 				console.error(message)
 			},
 		})
-
-	const processMessage = (msg: Msg): void => {
-		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
-
-		const all = [...timeline.past, timeline.present, ...timeline.future]
-
-		const index = match(msg, {
-			JumpTo: ({ index }) => index,
-
-			UserPressedKey: ({ key }) =>
-				match(
-					{ kind: key },
-					{
-						z: () => timeline.past.length - 1,
-						x: () => timeline.past.length + 1,
-						_: () => timeline.past.length + 1,
-					}
-				),
-
-			_: () => timeline.past.length + 1,
-		})
-
-		timeline = {
-			past: all.slice(0, index),
-			present: nextModel,
-			future: all.slice(index + 1),
-		}
-
-		nextCommands.forEach(executeCommand)
-	}
 
 	// Explicit state
 	let timeline = $state<Timeline>({

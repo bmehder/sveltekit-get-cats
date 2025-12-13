@@ -119,7 +119,7 @@ Crucially:
 
 - **Only models are stored in the timeline**
 - **Commands are never replayed**
-- **Side effects only occur when handling forward messages**
+- **Side effects only occur when handling messages that advance the timeline and produce commands.**
 
 This separation allows time travel, undo/redo, and debugging without accidentally re-running network requests or other effects.
 
@@ -132,7 +132,7 @@ User interactions (button clicks and keyboard events) are treated uniformly as m
 For example:
 
 - Clicking a button dispatches a message
-- Pressing a key dispatches a `{ kind: 'UserPressedKey', key }` message
+- Pressing a key dispatches a `{ kind: 'UserPressedKey', key: 'c' }` message
 
 All messages—regardless of origin—flow through the same pipeline:
 
