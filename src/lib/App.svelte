@@ -276,7 +276,7 @@
 			{ kind: key },
 			{
 				z: () => processMessage({ kind: 'UserPressedKey', key: 'z' }),
-				x: () => processMessage({ kind: 'UserPressedKey', key: 'Z' }),
+				Z: () => processMessage({ kind: 'UserPressedKey', key: 'Z' }),
 				c: () => processMessage({ kind: 'UserPressedKey', key: 'c' }),
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
 				D: () => processMessage({ kind: 'UserPressedKey', key: 'D' }),
