@@ -42,7 +42,7 @@
 		| { kind: 'CatsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
-		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' | 'z' | 'x' }
+		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' | 'z' | 'Z' }
 		| { kind: 'JumpTo'; index: number }
 		| { kind: 'Noop' }
 
@@ -139,7 +139,7 @@
 										nextCommands: [],
 									},
 
-						x: () =>
+						Z: () =>
 							timeline.future.length === 0
 								? { nextModel: timeline.present, nextCommands: [] }
 								: {
@@ -179,7 +179,7 @@
 					{ kind: key },
 					{
 						z: () => timeline.past.length - 1,
-						x: () => timeline.past.length + 1,
+						Z: () => timeline.past.length + 1,
 						_: () => timeline.past.length + 1,
 					}
 				),
@@ -276,11 +276,11 @@
 			{ kind: key },
 			{
 				z: () => processMessage({ kind: 'UserPressedKey', key: 'z' }),
-				x: () => processMessage({ kind: 'UserPressedKey', key: 'x' }),
+				x: () => processMessage({ kind: 'UserPressedKey', key: 'Z' }),
 				c: () => processMessage({ kind: 'UserPressedKey', key: 'c' }),
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
 				D: () => processMessage({ kind: 'UserPressedKey', key: 'D' }),
-				_: () => processMessage({ kind: 'Noop' }),
+				_: () => {},
 			}
 		)}
 />
