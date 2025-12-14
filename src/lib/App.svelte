@@ -15,7 +15,7 @@
 
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
-		cats: Animal[]
+		animals: Animal[]
 	}
 
 	type HistoryEntry = {
@@ -39,7 +39,7 @@
 
 	type Msg =
 		| { kind: 'UserClickedGetNewAnimal' }
-		| { kind: 'AnimalsLoaded'; cats: Animal[] }
+		| { kind: 'AnimalsLoaded'; animals: Animal[] }
 		| { kind: 'AnimalsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
@@ -56,15 +56,15 @@
 			UserClickedGetNewAnimal: () => ({
 				nextModel: {
 					remoteFetchStatus: { kind: 'Loading' },
-					cats: model.cats,
+					animals: model.animals,
 				},
 				nextCommands: [{ kind: 'FetchAnimal' }],
 			}),
 
-			AnimalsLoaded: ({ cats }) => ({
+			AnimalsLoaded: ({ animals }) => ({
 				nextModel: {
 					remoteFetchStatus: { kind: 'Success' },
-					cats: [...model.cats, ...cats],
+					animals: [...model.animals, ...animals],
 				},
 				nextCommands: [],
 			}),
@@ -72,7 +72,7 @@
 			AnimalsFailedToLoad: ({ error }) => ({
 				nextModel: {
 					remoteFetchStatus: { kind: 'Failure', error },
-					cats: model.cats,
+					animals: model.animals,
 				},
 				nextCommands: [],
 			}),
@@ -80,7 +80,7 @@
 			UserClickedRemoveLast: () => ({
 				nextModel: {
 					remoteFetchStatus: model.remoteFetchStatus,
-					cats: model.cats.slice(0, -1),
+					animals: model.animals.slice(0, -1),
 				},
 				nextCommands: [],
 			}),
@@ -88,7 +88,7 @@
 			UserClickedRemoveAll: () => ({
 				nextModel: {
 					remoteFetchStatus: model.remoteFetchStatus,
-					cats: [],
+					animals: [],
 				},
 				nextCommands: [],
 			}),
@@ -100,7 +100,7 @@
 						c: () => ({
 							nextModel: {
 								remoteFetchStatus: { kind: 'Loading' },
-								cats: model.cats,
+								animals: model.animals,
 							},
 							nextCommands: [{ kind: 'FetchAnimal' }],
 						}),
@@ -108,7 +108,7 @@
 						d: () => ({
 							nextModel: {
 								remoteFetchStatus: model.remoteFetchStatus,
-								cats: model.cats.slice(0, -1),
+								animals: model.animals.slice(0, -1),
 							},
 							nextCommands: [],
 						}),
@@ -116,7 +116,7 @@
 						D: () => ({
 							nextModel: {
 								remoteFetchStatus: model.remoteFetchStatus,
-								cats: [],
+								animals: [],
 							},
 							nextCommands: [],
 						}),
@@ -136,7 +136,7 @@
 						success
 							? processMessage({
 									kind: 'AnimalsLoaded',
-									cats: data,
+									animals: data,
 								})
 							: processMessage({
 									kind: 'AnimalsFailedToLoad',
@@ -178,17 +178,19 @@
 	// Explicit state
 	let model = $state<Model>({
 		remoteFetchStatus: { kind: 'Idle' },
-		cats: [],
+		animals: [],
 	})
 
 	let history = $state<HistoryEntry[]>([])
 
-	let animal = $state('cat')
+	let animal = $state<'cat' | 'dog'>('cat')
 
 	// Derived values
-	let formattedAnimal = $derived(animal.at(0)?.toUpperCase() + animal.slice(1))
-	
-	let catsCount: number = $derived(model.cats.length)
+	let formattedAnimal: string = $derived(
+		animal.at(0)?.toUpperCase() + animal.slice(1)
+	)
+
+	let catsCount: number = $derived(model.animals.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
 
@@ -263,7 +265,7 @@
 	<div class="outer">
 		<div class="inner" style="--inner-padding-block: 0 var(--size-3)">
 			<div class="grid auto-fill gap-1">
-				{#each model.cats as cat}
+				{#each model.animals as cat}
 					<img
 						id={cat.id}
 						class="aspect-square object-cover rounded-lg"
