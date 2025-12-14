@@ -8,10 +8,12 @@
 		url: z.httpUrl().min(32),
 	})
 
-	const CatsSchema = z.array(AnimalSchema)
+	const AnimalsSchema = z.array(AnimalSchema)
 
 	// TYPES
 	type Animal = z.infer<typeof AnimalSchema>
+
+	type SelectedAnimal = 'cat' | 'dog'
 
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
@@ -128,10 +130,10 @@
 	const executeCommand = (cmd: Cmd): void =>
 		matchStrict(cmd, {
 			FetchAnimal: () =>
-				fetch(`https://api.the${animal}api.com/v1/images/search`)
+				fetch(`https://api.the${selectedAnimal}api.com/v1/images/search`)
 					.then(response => response.json())
 					.then(json => {
-						const { success, data, error } = CatsSchema.safeParse(json)
+						const { success, data, error } = AnimalsSchema.safeParse(json)
 
 						success
 							? processMessage({
@@ -158,13 +160,14 @@
 
 	// Message Processor - a single impure runtime boundary
 	const processMessage = (msg: Msg): void => {
+		const prevModel = $state.snapshot(model)
 		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
 
 		history = [
 			...history,
 			{
 				msg,
-				prevModel: model,
+				prevModel,
 				nextModel,
 				commands: nextCommands,
 			},
@@ -183,25 +186,25 @@
 
 	let history = $state<HistoryEntry[]>([])
 
-	let animal = $state<'cat' | 'dog'>('cat')
+	let selectedAnimal = $state<SelectedAnimal>('cat')
 
 	// Derived values
-	let formattedAnimal: string = $derived(
-		animal.at(0)?.toUpperCase() + animal.slice(1)
+	let formattedAnimal = $derived<string>(
+		(selectedAnimal.at(0)?.toUpperCase() + selectedAnimal.slice(1))
 	)
 
-	let catsCount: number = $derived(model.animals.length)
+	let animalsCount: number = $derived(model.animals.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
 
-	let isFailure: boolean = $derived(model.remoteFetchStatus.kind === 'Failure')
+	let isAnimalRequestFailure: boolean = $derived(model.remoteFetchStatus.kind === 'Failure')
 
-	let isNoCats: boolean = $derived(catsCount === 0)
+	let isNoAnimals: boolean = $derived(animalsCount === 0)
 
-	let catRequestMessage: string | null = $derived(
+	let fetchRequestStatusMessage: string | null = $derived(
 		matchStrict(model.remoteFetchStatus, {
 			Idle: () => null,
-			Loading: () => 'Loading a new cat...',
+			Loading: () => `Loading a new ${selectedAnimal}...`,
 			Failure: ({ error }) => error,
 			Success: () => null,
 		})
@@ -252,7 +255,7 @@
 		<div class="inner">
 			<div class="content grid justify-start">
 				<label for="animals">Choose Animal:</label>
-				<select id="animals" bind:value={animal}>
+				<select id="animals" bind:value={selectedAnimal}>
 					<option value="cat">Cats</option>
 					<option value="dog">Dogs</option>
 				</select>
@@ -265,12 +268,12 @@
 	<div class="outer">
 		<div class="inner" style="--inner-padding-block: 0 var(--size-3)">
 			<div class="grid auto-fill gap-1">
-				{#each model.animals as cat}
+				{#each model.animals as animal}
 					<img
-						id={cat.id}
+						id={animal.id}
 						class="aspect-square object-cover rounded-lg"
-						src={cat.url}
-						alt="random cat"
+						src={animal.url}
+						alt="random {selectedAnimal}"
 					/>
 				{/each}
 			</div>
@@ -291,25 +294,25 @@
 
 				<button
 					onclick={() => processMessage({ kind: 'UserClickedRemoveLast' })}
-					disabled={isLoading || isNoCats}
+					disabled={isLoading || isNoAnimals}
 				>
 					Remove Last
 				</button>
 
 				<button
 					onclick={() => processMessage({ kind: 'UserClickedRemoveAll' })}
-					disabled={isLoading || isNoCats}
+					disabled={isLoading || isNoAnimals}
 				>
 					Remove All
 				</button>
 
-				<div>Number of animals: {catsCount}</div>
+				<div>Number of animals: {animalsCount}</div>
 
-				<div class:text-red-600={isFailure}>
-					{#if isFailure}
-						<pre>{catRequestMessage}</pre>
+				<div class:text-red-600={isAnimalRequestFailure}>
+					{#if isAnimalRequestFailure}
+						<pre>{fetchRequestStatusMessage}</pre>
 					{:else}
-						<p>{catRequestMessage}</p>
+						<p>{fetchRequestStatusMessage}</p>
 					{/if}
 				</div>
 			</div>

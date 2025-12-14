@@ -1,10 +1,20 @@
-# SvelteKit Get Cats
+# SvelteKit Get Cats & Dogs
 
-This project explores a **message-driven, unidirectional architecture** inspired by The Elm Architecture (TEA), adapted for Svelte 5. The focus is on making **state transitions explicit, predictable, and testable**, while keeping side effects centralized and easy to reason about.
+This project extends the original **message-driven, unidirectional architecture** inspired by The Elm Architecture (TEA) for Svelte 5 to support both **cats and dogs**. The core principles remain: making **state transitions explicit, predictable, and testable**, while keeping side effects centralized and easy to reason about.
 
-Rather than relying on implicit reactivity or lifecycle hooks, all meaningful behavior flows through a small set of well-defined concepts: messages, pure state transitions, and explicit commands.
+Now, users can select between cats and dogs, and the app fetches data accordingly. The design continues to emphasize **fearless refactoring** through explicit messaging and unidirectional data flow.
 
-This repository is intentionally minimal and experimental. It is less about features and more about **clarity of control flow and confident refactoring**.
+---
+
+## Core Philosophy
+
+An app is fundamentally **a sequence of state and commands over time**. Each message describes *what happened*, driving pure state transitions and triggering explicit commands that represent real side effects like data fetching.
+
+This philosophy encourages:
+
+- Clear boundaries between pure logic and impure effects
+- Predictable, testable state changes
+- A single source of truth for the app’s behavior
 
 ---
 
@@ -18,10 +28,10 @@ The application is built around a few simple but powerful ideas:
 2. **Pure State Transitions**  
    A single pure function (`computeNextModelAndCommands`) takes a message and returns:
    - the next `Model`
-   - a list of `Cmd` values describing side effects to run
+   - a list of `Cmd` values describing side effects (limited strictly to real effects like fetching)
 
 3. **Explicit Commands for Side Effects**  
-   Side effects (HTTP requests, logging, etc.) are modeled as data (`Cmd`) and interpreted in exactly one place.
+   Side effects such as HTTP requests are modeled as data (`Cmd`) and interpreted in exactly one place. Logging commands have been removed to keep commands focused on real effects.
 
 4. **Unidirectional Data Flow**  
 
@@ -31,32 +41,19 @@ The application is built around a few simple but powerful ideas:
 
    Data flows in one direction. There are no hidden mutations or implicit effects.
 
-Together, these form a small, explicit state machine.
-
----
-
-## Validation Schemas
-
-External data (the cat API response) is validated at runtime using **Zod** schemas. This provides:
-
-- Runtime safety when dealing with untrusted input
-- Inferred TypeScript types from the same schema
-- A clear boundary between the outside world and the app’s internal model
-
-This is a key part of making the architecture robust and debuggable.
+5. **Development-Time History and Debugging**  
+   Leveraging Svelte 5’s `$inspect`, the app records message and state history during development, enabling easier debugging and understanding of state evolution over time.
 
 ---
 
 ## Types
 
-The core protocol of the app is described entirely in types:
+The core protocol of the app remains:
 
-- `Model` — the complete state of the application
+- `Model` — the complete state of the application, including http request status and fetched data
 - `Msg` — all valid messages the app can respond to
-- `Cmd` — explicit descriptions of side effects
-- `NextModelAndCommands` — the pair of results from handling a message
-
-All of these are discriminated unions, enabling exhaustive pattern matching.
+- `Cmd` — explicit descriptions of side effects (fetching cats or dogs)
+- `NextModelAndCommands` — the pair of model and command results from handling a message
 
 ---
 
@@ -74,28 +71,28 @@ This function:
 - does not perform side effects
 - describes *what the next state should be* and *which commands should run*
 
-Pattern matching is done with `matchStrict`, so every valid message must be handled explicitly. Adding a new message forces the compiler to guide you to all the necessary updates.
+Pattern matching is done with `matchStrict`, so every valid message must be handled explicitly. This enforces comprehensive handling and guides refactoring.
 
 ---
 
-## Commands (Explicit Side Effects)
+## Commands (Explicit Side Effects Only)
 
-Side effects are modeled as a small `Cmd` union, for example:
+Side effects are modeled as a focused `Cmd` union:
 
 ```ts
 type Cmd =
-  | { kind: 'FetchCat' }
-  | { kind: 'LogInfo'; message: string }
-  | { kind: 'LogError'; message: string }
+   | { kind: 'FetchAnimal' }
+   | { kind: 'LogInfo'; message: string }
+   | { kind: 'LogError'; message: string }
 ```
 
-Commands are **not part of the model**. They are instructions for the runtime.
+Commands are **not part of the model**. They are instructions for the runtime to perform real side effects. Logging commands are intended for temporary use and should be used rarely.
 
-A single interpreter function executes them:
+A single interpreter function executes commands:
 
 ```ts
 const executeCommand = (cmd: Cmd): void => {
-  // perform the effect
+  // perform the fetch effect
 }
 ```
 
@@ -105,21 +102,20 @@ This keeps all impure behavior localized and auditable.
 
 ## External Events as Messages
 
-User interactions and async results are all turned into messages:
+User interactions, keyboard shortcuts, and async fetch results are all turned into messages:
 
-- Clicking a button dispatches a message
-- Pressing a key dispatches a message
-- Fetch success or failure dispatches a message
+- Keyboard shortcuts dispatch messages
+- Fetch success or failure dispatch messages
 
-The meaning of those events is determined entirely inside the pure transition function, not spread across event handlers.
+This keeps the entire control flow explicit and centralized.
 
 ---
 
 ## Project Structure
 
-At a high level, the main component is organized into these sections:
+The main component is organized into these sections:
 
-- Validation Schemas (Zod)
+- Validation Schemas (Zod) for runtime safety and inferred types
 - Types (Model, Msg, Cmd, etc.)
 - Model (state)
 - Derived State (pure projections for the view)
@@ -132,9 +128,15 @@ Keeping these concepts close together makes the architecture easy to follow and 
 
 ---
 
-## Why Not Just `$effect`?
+## Why This Approach?
 
-In this project, side effects are triggered by **messages**, not by **state changes**. The choice was made to make behavior easier to trace, reason about, and test. Effects happen because *something happened*, not because *some value changed*.
+This project prioritizes:
+
+- **Fearless refactoring:** The explicit, typed message-driven design means adding or changing features guides you to all necessary updates.
+- **Explicit control flow:** No hidden state mutations or implicit effects.
+- **Testability:** Pure state transitions can be tested in isolation.
+- **Clarity:** Side effects are explicit and localized.
+- **Development tooling:** Using Svelte 5’s `$inspect` to trace message and state history during development.
 
 ---
 
@@ -142,15 +144,15 @@ In this project, side effects are triggered by **messages**, not by **state chan
 
 This project is:
 
-- ✔️ An exploration of TEA-style ideas in Svelte
+- ✔️ An experimental exploration of TEA-style ideas in Svelte
 - ✔️ A demonstration of explicit state machines in UI code
 - ✔️ A foundation for experimentation and learning
 
 It is **not**:
 
-- A framework
+- A full framework or runtime
 - A replacement for idiomatic Svelte in simple cases
-- A full Elm runtime reimplementation
+- A complete Elm runtime reimplementation
 
 The goal is clarity, not abstraction for its own sake.
 
@@ -162,7 +164,7 @@ This codebase favors:
 
 - Explicit over implicit behavior
 - Typed protocols over ad-hoc state
-- Centralized side effects
+- Centralized side effects limited to real effects
 - Confidence when refactoring
 
 If you’re interested in functional state modeling, exhaustive pattern matching, or applying Elm-inspired ideas in a Svelte context, this project is meant to be a readable and adaptable starting point.
