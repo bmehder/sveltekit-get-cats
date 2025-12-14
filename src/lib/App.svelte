@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Philosophy: An app is a timeline of (state, commands) pairs.
+	// This app is a sequence of interpreted messages, each producing a new state and an optional set of commands.
 
 	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
@@ -18,6 +18,18 @@
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
 		cats: Cat[]
+	}
+
+	type Cmd =
+		| { kind: 'FetchCat' }
+		| { kind: 'LogInfo'; message: string }
+		| { kind: 'LogError'; message: string }
+
+	type HistoryEntry = {
+		msg: Msg
+		prevModel: Model
+		nextModel: Model
+		commands: Cmd[]
 	}
 
 	type NextModelAndCommands = {
@@ -40,11 +52,7 @@
 		| { kind: 'UserClickedRemoveAll' }
 		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
 
-	type Cmd =
-		| { kind: 'FetchCat' }
-		| { kind: 'LogInfo'; message: string }
-		| { kind: 'LogError'; message: string }
-
+	// Message -> (NextModel, NextCommand) Mapper
 	const computeNextModelAndCommands = (msg: Msg): NextModelAndCommands =>
 		matchStrict(msg, {
 			UserClickedGetNewCat: () => ({
@@ -52,10 +60,7 @@
 					remoteFetchStatus: { kind: 'Loading' },
 					cats: model.cats,
 				},
-				nextCommands: [
-					{ kind: 'LogInfo', message: 'User clicked Get New Cat' },
-					{ kind: 'FetchCat' },
-				],
+				nextCommands: [{ kind: 'FetchCat' }],
 			}),
 
 			CatsLoaded: ({ cats }) => ({
@@ -63,9 +68,7 @@
 					remoteFetchStatus: { kind: 'Success' },
 					cats: [...model.cats, ...cats],
 				},
-				nextCommands: [
-					{ kind: 'LogInfo', message: `Cats loaded: ${JSON.stringify(cats)}` },
-				],
+				nextCommands: [],
 			}),
 
 			CatsFailedToLoad: ({ error }) => ({
@@ -73,9 +76,7 @@
 					remoteFetchStatus: { kind: 'Failure', error },
 					cats: model.cats,
 				},
-				nextCommands: [
-					{ kind: 'LogError', message: `Cats failed to load: ${error}` },
-				],
+				nextCommands: [],
 			}),
 
 			UserClickedRemoveLast: () => ({
@@ -103,10 +104,7 @@
 								remoteFetchStatus: { kind: 'Loading' },
 								cats: model.cats,
 							},
-							nextCommands: [
-								{ kind: 'LogInfo', message: 'User pressed c' },
-								{ kind: 'FetchCat' },
-							],
+							nextCommands: [{ kind: 'FetchCat' }],
 						}),
 
 						d: () => ({
@@ -114,7 +112,7 @@
 								remoteFetchStatus: model.remoteFetchStatus,
 								cats: model.cats.slice(0, -1),
 							},
-							nextCommands: [{ kind: 'LogInfo', message: 'User pressed d' }],
+							nextCommands: [],
 						}),
 
 						D: () => ({
@@ -122,19 +120,13 @@
 								remoteFetchStatus: model.remoteFetchStatus,
 								cats: [],
 							},
-							nextCommands: [{ kind: 'LogInfo', message: 'User pressed shift + d' }],
+							nextCommands: [],
 						}),
 					}
 				),
 		})
 
-	const processMessage = (msg: Msg): void => {
-		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
-
-		model = nextModel
-		nextCommands.forEach(executeCommand)
-	}
-
+	// Command Executor
 	const executeCommand = (cmd: Cmd): void =>
 		matchStrict(cmd, {
 			FetchCat: () =>
@@ -166,12 +158,32 @@
 			},
 		})
 
+	// Message Processor - a single impure runtime boundary
+	const processMessage = (msg: Msg): void => {
+		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
+
+		history = [
+			...history,
+			{
+				msg,
+				prevModel: model,
+				nextModel,
+				commands: nextCommands,
+			},
+		]
+
+		model = nextModel
+
+		nextCommands.forEach(executeCommand)
+	}
+
 	// Explicit state
 	let model = $state<Model>({
 		remoteFetchStatus: { kind: 'Idle' },
 		cats: [],
 	})
-	
+
+	let history = $state<HistoryEntry[]>([])
 
 	// Derived values
 	let catsCount: number = $derived(model.cats.length)
@@ -191,8 +203,22 @@
 		})
 	)
 
-	// Smart Logger
-	// $inspect('New model: \n', model)
+	$inspect(history).with((type, history) => {
+		if (type === 'update') {
+			const entry = history.at(-1)
+
+			console.group(`History #${history.length}`)
+			console.log('msg', entry?.msg)
+			console.log('prevModel', {
+				prevModel: entry?.prevModel,
+			})
+			console.log('nextModel', {
+				nextModel: entry?.nextModel,
+			})
+			console.log('commands', entry?.commands)
+			console.groupEnd()
+		}
+	})
 </script>
 
 <svelte:window
