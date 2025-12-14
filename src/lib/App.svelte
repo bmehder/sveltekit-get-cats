@@ -187,6 +187,7 @@
 
 	// Derived values
 	let formattedAnimal = $derived(animal.at(0)?.toUpperCase() + animal.slice(1))
+	
 	let catsCount: number = $derived(model.cats.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
@@ -260,7 +261,7 @@
 
 <section>
 	<div class="outer">
-		<div class="inner">
+		<div class="inner" style="--inner-padding-block: 0 var(--size-3)">
 			<div class="grid auto-fill gap-1">
 				{#each model.cats as cat}
 					<img
