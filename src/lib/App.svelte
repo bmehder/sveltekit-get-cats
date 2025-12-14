@@ -15,6 +15,8 @@
 
 	type SelectedAnimal = 'cat' | 'dog'
 
+	type KeyboardShortcut = 'c' | 'd' | 'D'
+
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
 		animals: Animal[]
@@ -190,14 +192,16 @@
 
 	// Derived values
 	let formattedAnimal = $derived<string>(
-		(selectedAnimal.at(0)?.toUpperCase() + selectedAnimal.slice(1))
+		selectedAnimal.at(0)?.toUpperCase() + selectedAnimal.slice(1)
 	)
 
 	let animalsCount: number = $derived(model.animals.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
 
-	let isAnimalRequestFailure: boolean = $derived(model.remoteFetchStatus.kind === 'Failure')
+	let isAnimalRequestFailure: boolean = $derived(
+		model.remoteFetchStatus.kind === 'Failure'
+	)
 
 	let isNoAnimals: boolean = $derived(animalsCount === 0)
 
@@ -211,7 +215,7 @@
 	)
 
 	$inspect(history).with((type, history) =>
-		match(
+		matchStrict(
 			{ kind: type },
 			{
 				init: () => {
@@ -239,8 +243,8 @@
 
 <svelte:window
 	onkeydown={({ key }) =>
-		match(
-			{ kind: key },
+		match<{ kind: KeyboardShortcut }, void>(
+			{ kind: key as KeyboardShortcut },
 			{
 				c: () => processMessage({ kind: 'UserPressedKey', key: 'c' }),
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
