@@ -1,29 +1,22 @@
 <script lang="ts">
-	// This app is a sequence of interpreted messages, each producing a new state and an optional set of commands.
-
 	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
 
 	// Validation Schemas
-	const CatSchema = z.object({
+	const AnimalSchema = z.object({
 		id: z.string().min(1),
 		url: z.httpUrl().min(32),
 	})
 
-	const CatsSchema = z.array(CatSchema)
+	const CatsSchema = z.array(AnimalSchema)
 
 	// TYPES
-	type Cat = z.infer<typeof CatSchema>
+	type Animal = z.infer<typeof AnimalSchema>
 
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
-		cats: Cat[]
+		cats: Animal[]
 	}
-
-	type Cmd =
-		| { kind: 'FetchCat' }
-		| { kind: 'LogInfo'; message: string }
-		| { kind: 'LogError'; message: string }
 
 	type HistoryEntry = {
 		msg: Msg
@@ -45,25 +38,30 @@
 		| { kind: 'Success' }
 
 	type Msg =
-		| { kind: 'UserClickedGetNewCat' }
-		| { kind: 'CatsLoaded'; cats: Cat[] }
-		| { kind: 'CatsFailedToLoad'; error: string }
+		| { kind: 'UserClickedGetNewAnimal' }
+		| { kind: 'AnimalsLoaded'; cats: Animal[] }
+		| { kind: 'AnimalsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
 		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
 
+	type Cmd =
+		| { kind: 'FetchAnimal' }
+		| { kind: 'LogInfo'; message: string }
+		| { kind: 'LogError'; message: string }
+
 	// Message -> (NextModel, NextCommand) Mapper
 	const computeNextModelAndCommands = (msg: Msg): NextModelAndCommands =>
 		matchStrict(msg, {
-			UserClickedGetNewCat: () => ({
+			UserClickedGetNewAnimal: () => ({
 				nextModel: {
 					remoteFetchStatus: { kind: 'Loading' },
 					cats: model.cats,
 				},
-				nextCommands: [{ kind: 'FetchCat' }],
+				nextCommands: [{ kind: 'FetchAnimal' }],
 			}),
 
-			CatsLoaded: ({ cats }) => ({
+			AnimalsLoaded: ({ cats }) => ({
 				nextModel: {
 					remoteFetchStatus: { kind: 'Success' },
 					cats: [...model.cats, ...cats],
@@ -71,7 +69,7 @@
 				nextCommands: [],
 			}),
 
-			CatsFailedToLoad: ({ error }) => ({
+			AnimalsFailedToLoad: ({ error }) => ({
 				nextModel: {
 					remoteFetchStatus: { kind: 'Failure', error },
 					cats: model.cats,
@@ -104,7 +102,7 @@
 								remoteFetchStatus: { kind: 'Loading' },
 								cats: model.cats,
 							},
-							nextCommands: [{ kind: 'FetchCat' }],
+							nextCommands: [{ kind: 'FetchAnimal' }],
 						}),
 
 						d: () => ({
@@ -129,24 +127,24 @@
 	// Command Executor
 	const executeCommand = (cmd: Cmd): void =>
 		matchStrict(cmd, {
-			FetchCat: () =>
-				fetch('https://api.thecatapi.com/v1/images/search')
+			FetchAnimal: () =>
+				fetch(`https://api.the${animal}api.com/v1/images/search`)
 					.then(response => response.json())
 					.then(json => {
 						const { success, data, error } = CatsSchema.safeParse(json)
 
 						success
 							? processMessage({
-									kind: 'CatsLoaded',
+									kind: 'AnimalsLoaded',
 									cats: data,
 								})
 							: processMessage({
-									kind: 'CatsFailedToLoad',
+									kind: 'AnimalsFailedToLoad',
 									error: error.message,
 								})
 					})
 					.catch(err => {
-						processMessage({ kind: 'CatsFailedToLoad', error: String(err) })
+						processMessage({ kind: 'AnimalsFailedToLoad', error: String(err) })
 					}),
 
 			LogInfo: ({ message }) => {
@@ -185,7 +183,10 @@
 
 	let history = $state<HistoryEntry[]>([])
 
+	let animal = $state('cat')
+
 	// Derived values
+	let formattedAnimal = $derived(animal.at(0)?.toUpperCase() + animal.slice(1))
 	let catsCount: number = $derived(model.cats.length)
 
 	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
@@ -203,22 +204,31 @@
 		})
 	)
 
-	$inspect(history).with((type, history) => {
-		if (type === 'update') {
-			const entry = history.at(-1)
+	$inspect(history).with((type, history) =>
+		match(
+			{ kind: type },
+			{
+				init: () => {
+					console.log('App Started 🚀')
+				},
 
-			console.group(`History #${history.length}`)
-			console.log('msg', entry?.msg)
-			console.log('prevModel', {
-				prevModel: entry?.prevModel,
-			})
-			console.log('nextModel', {
-				nextModel: entry?.nextModel,
-			})
-			console.log('commands', entry?.commands)
-			console.groupEnd()
-		}
-	})
+				update: () => {
+					const entry = history.at(-1)
+
+					console.group(`History #${history.length}`)
+					console.log('msg', entry?.msg)
+					console.log('prevModel', {
+						prevModel: entry?.prevModel,
+					})
+					console.log('nextModel', {
+						nextModel: entry?.nextModel,
+					})
+					console.log('commands', entry?.commands)
+					console.groupEnd()
+				},
+			}
+		)
+	)
 </script>
 
 <svelte:window
@@ -233,6 +243,20 @@
 			}
 		)}
 />
+
+<section>
+	<div class="outer">
+		<div class="inner">
+			<div class="content grid justify-start">
+				<label for="animals">Choose Animal:</label>
+				<select id="animals" bind:value={animal}>
+					<option value="cat">Cats</option>
+					<option value="dog">Dogs</option>
+				</select>
+			</div>
+		</div>
+	</div>
+</section>
 
 <section>
 	<div class="outer">
@@ -256,10 +280,10 @@
 		<div class="inner" style="--inner-padding-block: 0;">
 			<div class="flex flex-wrap items-center gap-0-5">
 				<button
-					onclick={() => processMessage({ kind: 'UserClickedGetNewCat' })}
+					onclick={() => processMessage({ kind: 'UserClickedGetNewAnimal' })}
 					disabled={isLoading}
 				>
-					Get New Cat
+					Get New {formattedAnimal}
 				</button>
 
 				<button
@@ -276,7 +300,7 @@
 					Remove All
 				</button>
 
-				<div>Number of Cats: {catsCount}</div>
+				<div>Number of animals: {catsCount}</div>
 
 				<div class:text-red-600={isFailure}>
 					{#if isFailure}
