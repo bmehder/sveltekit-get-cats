@@ -1,20 +1,21 @@
 # SvelteKit Get Cats & Dogs
 
-This project extends the original **message-driven, unidirectional architecture** inspired by The Elm Architecture (TEA) for Svelte 5 to support both **cats and dogs**. The core principles remain: making **state transitions explicit, predictable, and testable**, while keeping side effects centralized and easy to reason about.
+This project is a **message-driven, unidirectional architecture** inspired by The Elm Architecture (TEA) for Svelte 5. The core principles are making **state transitions explicit, predictable, and testable**, while **keeping side effects centralized** and easy to reason about.
 
-Now, users can select between cats and dogs, and the app fetches data accordingly. The design continues to emphasize **fearless refactoring** through explicit messaging and unidirectional data flow.
+Users can select between cats and dogs, and the app fetches data accordingly. The design emphasizes **fearless refactoring** through explicit messaging and unidirectional data flow.
 
 ---
 
 ## Core Philosophy
 
-An app is fundamentally **a sequence of state and commands over time**. Each message describes *what happened*, driving pure state transitions and triggering explicit commands that represent real side effects like data fetching.
+An app is fundamentally **a sequence of state and commands over time**. Each message describes _what happened_, driving pure state transitions and triggering explicit commands that represent real side effects like data fetching.
 
-This philosophy encourages:
+This philosophy enforces:
 
-- Clear boundaries between pure logic and impure effects
+- Clear separation between pure logic and side effects
 - Predictable, testable state changes
-- A single source of truth for the app’s behavior
+- A single source of truth for the app’s state
+- Development-time inspection of the frame history via Svelte 5’s `$inspect(frames)`
 
 ---
 
@@ -23,26 +24,27 @@ This philosophy encourages:
 The application is built around a few simple but powerful ideas:
 
 1. **Messages as the Driver of Change**  
-   All interactions—user input, async results, and external events—are represented as typed messages (`Msg`). Messages describe *what happened*, not *what to do*.
+   All interactions—user input, async results, and external events—are represented as typed messages (`Msg`). Messages describe _what happened_, not _what to do_.
 
 2. **Pure State Transitions**  
    A single pure function (`computeNextModelAndCommands`) takes a message and returns:
+
    - the next `Model`
-   - a list of `Cmd` values describing side effects (limited strictly to real effects like fetching)
+   - a list of `Cmd` values describing side effects
 
 3. **Explicit Commands for Side Effects**  
-   Side effects such as HTTP requests are modeled as data (`Cmd`) and interpreted in exactly one place. Logging commands have been removed to keep commands focused on real effects.
+   Side effects such as HTTP requests are modeled as data (`Cmd`) and interpreted in exactly one place. Logging commands are not recommended except for possible temporary debugging.
 
-4. **Unidirectional Data Flow**  
+4. **Unidirectional Data Flow**
 
    ```
-   View → Msg → Next Model + Commands → Model → Derived State → View
+   View → Msg → (Next Model + Next Commands) → (Replace Model + Run Commands) → Derived State → View
    ```
 
    Data flows in one direction. There are no hidden mutations or implicit effects.
 
-5. **Development-Time History and Debugging**  
-   Leveraging Svelte 5’s `$inspect`, the app records message and state history during development, enabling easier debugging and understanding of state evolution over time.
+5. **Development-Time Frame Inspection**  
+   Using Svelte 5’s `$inspect(frames)`, the app records and exposes a history of frames (state snapshots, messages, and commands) during development, enabling easier debugging and understanding of state evolution over time.
 
 ---
 
@@ -50,10 +52,11 @@ The application is built around a few simple but powerful ideas:
 
 The core protocol of the app remains:
 
-- `Model` — the complete state of the application, including http request status and fetched data
+- `Model` — the complete state of the application, including HTTP request status and fetched data
 - `Msg` — all valid messages the app can respond to
-- `Cmd` — explicit descriptions of side effects (fetching cats or dogs)
+- `Cmd` — explicit descriptions of side effects
 - `NextModelAndCommands` — the pair of model and command results from handling a message
+- `Frame` — the recorded sequence of message and state snapshots for development-time inspection
 
 ---
 
@@ -69,7 +72,7 @@ This function:
 
 - does not mutate state
 - does not perform side effects
-- describes *what the next state should be* and *which commands should run*
+- describes _what the next state should be_ and _which commands should run_
 
 Pattern matching is done with `matchStrict`, so every valid message must be handled explicitly. This enforces comprehensive handling and guides refactoring.
 
@@ -81,18 +84,18 @@ Side effects are modeled as a focused `Cmd` union:
 
 ```ts
 type Cmd =
+   | { kind: 'SelectCats' }
+   | { kind: 'SelectDogs' }
    | { kind: 'FetchAnimal' }
-   | { kind: 'LogInfo'; message: string }
-   | { kind: 'LogError'; message: string }
 ```
 
-Commands are **not part of the model**. They are instructions for the runtime to perform real side effects. Logging commands are intended for temporary use and should be used rarely.
+Commands are **not part of the model**. They are instructions for the runtime to perform real side effects such as HTTP fetching.
 
 A single interpreter function executes commands:
 
 ```ts
 const executeCommand = (cmd: Cmd): void => {
-  // perform the fetch effect
+	// perform the fetch effect
 }
 ```
 
@@ -116,7 +119,7 @@ This keeps the entire control flow explicit and centralized.
 The main component is organized into these sections:
 
 - Validation Schemas (Zod) for runtime safety and inferred types
-- Types (Model, Msg, Cmd, etc.)
+- Types (Model, Msg, Cmd, Frame, etc.)
 - Model (state)
 - Derived State (pure projections for the view)
 - Next Model + Commands (pure transition)
@@ -136,7 +139,7 @@ This project prioritizes:
 - **Explicit control flow:** No hidden state mutations or implicit effects.
 - **Testability:** Pure state transitions can be tested in isolation.
 - **Clarity:** Side effects are explicit and localized.
-- **Development tooling:** Using Svelte 5’s `$inspect` to trace message and state history during development.
+- **Development tooling:** Using Svelte 5’s `$inspect(frames)` to trace frame history during development.
 
 ---
 

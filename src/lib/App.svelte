@@ -3,15 +3,15 @@
 	import { match, matchStrict } from 'canary-js'
 
 	// Validation Schemas
-	const AnimalSchema = z.object({
+	const AnimalResponseSchema = z.object({
 		id: z.string().min(1),
 		url: z.httpUrl().min(32),
 	})
 
-	const AnimalsSchema = z.array(AnimalSchema)
+	const AnimalsResponseSchema = z.array(AnimalResponseSchema)
 
 	// TYPES
-	type Animal = z.infer<typeof AnimalSchema>
+	type Animal = z.infer<typeof AnimalResponseSchema>
 
 	type SelectedAnimal = 'cat' | 'dog'
 
@@ -22,7 +22,7 @@
 		animals: Animal[]
 	}
 
-	type HistoryEntry = {
+	type Frame = {
 		msg: Msg
 		prevModel: Model
 		nextModel: Model
@@ -50,6 +50,8 @@
 		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
 
 	type Cmd =
+		| { kind: 'SelectCats' }
+		| { kind: 'SelectDogs' }
 		| { kind: 'FetchAnimal' }
 		| { kind: 'LogInfo'; message: string }
 		| { kind: 'LogError'; message: string }
@@ -106,15 +108,15 @@
 								remoteFetchStatus: { kind: 'Loading' },
 								animals: model.animals,
 							},
-							nextCommands: [{ kind: 'FetchAnimal' }],
+							nextCommands: [{ kind: 'SelectCats' }, { kind: 'FetchAnimal' }],
 						}),
 
 						d: () => ({
 							nextModel: {
 								remoteFetchStatus: model.remoteFetchStatus,
-								animals: model.animals.slice(0, -1),
+								animals: model.animals,
 							},
-							nextCommands: [],
+							nextCommands: [{ kind: 'SelectDogs' }, { kind: 'FetchAnimal' }],
 						}),
 
 						D: () => ({
@@ -135,7 +137,7 @@
 				fetch(`https://api.the${selectedAnimal}api.com/v1/images/search`)
 					.then(response => response.json())
 					.then(json => {
-						const { success, data, error } = AnimalsSchema.safeParse(json)
+						const { success, data, error } = AnimalsResponseSchema.safeParse(json)
 
 						success
 							? processMessage({
@@ -158,6 +160,14 @@
 			LogError: ({ message }) => {
 				console.error(message)
 			},
+
+			SelectCats: () => {
+				selectedAnimal = 'cat'
+			},
+
+			SelectDogs: () => {
+				selectedAnimal = 'dog'
+			},
 		})
 
 	// Message Processor - a single impure runtime boundary
@@ -165,8 +175,8 @@
 		const prevModel = $state.snapshot(model)
 		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
 
-		history = [
-			...history,
+		frames = [
+			...frames,
 			{
 				msg,
 				prevModel,
@@ -186,7 +196,7 @@
 		animals: [],
 	})
 
-	let history = $state<HistoryEntry[]>([])
+	let frames = $state<Frame[]>([])
 
 	let selectedAnimal = $state<SelectedAnimal>('cat')
 
@@ -214,7 +224,7 @@
 		})
 	)
 
-	$inspect(history).with((type, history) =>
+	$inspect(frames).with((type, frames) =>
 		matchStrict(
 			{ kind: type },
 			{
@@ -223,9 +233,9 @@
 				},
 
 				update: () => {
-					const entry = history.at(-1)
+					const entry = frames.at(-1)
 
-					console.group(`History #${history.length}`)
+					console.group(`Frame #${frames.length}`)
 					console.log('msg', entry?.msg)
 					console.log('prevModel', {
 						prevModel: entry?.prevModel,
