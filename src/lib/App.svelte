@@ -17,6 +17,7 @@
 
 	type KeyboardShortcut = 'c' | 'd' | 'x' | 'X'
 
+	// --- Remote Fetch State (async state machine) ---
 	type RemoteFetchStatus<E> =
 		| { kind: 'Idle' }
 		| { kind: 'Loading' }
