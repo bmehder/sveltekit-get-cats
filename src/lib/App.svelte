@@ -216,7 +216,7 @@
 	let frames = $state<Frame[]>([])
 
 	// Derived values
-	let api = $derived(`https://api.the${model.selectedAnimal}api.com/v1/images/search`)
+	let api = $derived(`https://api.the${model.selectedAnimal.toLowerCase()}api.com/v1/images/search`)
 
 	let animalsCount = $derived(model.animals.length)
 
@@ -244,7 +244,7 @@
 				init: () => {
 					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
 					console.log('App Started 🚀')
-					console.log('%cInitial Model:', 'color: deepskyblue;')
+					console.group('%cInitial Model:', 'color: deepskyblue;')
 					console.log(
 						'%cremoteFetchStatus:',
 						'color: mediumseagreen;',
@@ -261,6 +261,7 @@
 						$state.snapshot(model.selectedAnimal)
 					)
 					console.groupEnd()
+					console.groupEnd()
 				},
 
 				update: () => {
@@ -268,6 +269,7 @@
 
 					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
 					console.log('%cmsg:', 'color: deepskyblue;', frame?.msg)
+					console.group('%cNext Model & Next Commands:', 'color: cornflowerblue;')
 					console.log(
 						'%cremoteFetchStatus:',
 						'color: mediumseagreen;',
@@ -288,6 +290,7 @@
 						'color: goldenrod;',
 						JSON.stringify(frame?.nextCommands, null, 2)
 					)
+					console.groupEnd()
 					console.groupEnd()
 				},
 			}
@@ -322,7 +325,7 @@
 							kind: 'UserSelectedAnimal',
 							animal: (e?.target as HTMLSelectElement)?.value as SelectedAnimal,
 						})}
-					disabled={isLoading}
+					disabled={isLoading} 
 				>
 					<option>Cat</option>
 					<option>Dog</option>
