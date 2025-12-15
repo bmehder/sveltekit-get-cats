@@ -13,20 +13,20 @@
 	// TYPES
 	type Animal = z.infer<typeof AnimalResponseSchema>
 
-	type SelectedAnimal = 'cat' | 'dog'
+	type SelectedAnimal = 'Cat' | 'Dog'
 
-	type KeyboardShortcut = 'c' | 'd' | 'D'
+	type KeyboardShortcut = 'c' | 'd' | 'x' | 'X'
+
+	type RemoteFetchStatus<E> =
+		| { kind: 'Idle' }
+		| { kind: 'Loading' }
+		| { kind: 'Failure'; error: E }
+		| { kind: 'Success' }
 
 	type Model = {
 		remoteFetchStatus: RemoteFetchStatus<string>
 		animals: Animal[]
-	}
-
-	type Frame = {
-		msg: Msg
-		prevModel: Model
-		nextModel: Model
-		commands: Cmd[]
+		selectedAnimal: SelectedAnimal
 	}
 
 	type NextModelAndCommands = {
@@ -34,24 +34,21 @@
 		nextCommands: Cmd[]
 	}
 
-	// ADTs
-	type RemoteFetchStatus<E> =
-		| { kind: 'Idle' }
-		| { kind: 'Loading' }
-		| { kind: 'Failure'; error: E }
-		| { kind: 'Success' }
+	type Frame = NextModelAndCommands & {
+		msg: Msg
+	}
 
+	// Messages & Commands
 	type Msg =
 		| { kind: 'UserClickedGetNewAnimal' }
 		| { kind: 'AnimalsLoaded'; animals: Animal[] }
 		| { kind: 'AnimalsFailedToLoad'; error: string }
 		| { kind: 'UserClickedRemoveLast' }
 		| { kind: 'UserClickedRemoveAll' }
-		| { kind: 'UserPressedKey'; key: 'c' | 'd' | 'D' }
+		| { kind: 'UserPressedKey'; key: KeyboardShortcut }
+		| { kind: 'UserSelectedAnimal'; animal: SelectedAnimal }
 
 	type Cmd =
-		| { kind: 'SelectCats' }
-		| { kind: 'SelectDogs' }
 		| { kind: 'FetchAnimal' }
 		| { kind: 'LogInfo'; message: string }
 		| { kind: 'LogError'; message: string }
@@ -63,6 +60,7 @@
 				nextModel: {
 					remoteFetchStatus: { kind: 'Loading' },
 					animals: model.animals,
+					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [{ kind: 'FetchAnimal' }],
 			}),
@@ -71,6 +69,7 @@
 				nextModel: {
 					remoteFetchStatus: { kind: 'Success' },
 					animals: [...model.animals, ...animals],
+					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
@@ -79,22 +78,25 @@
 				nextModel: {
 					remoteFetchStatus: { kind: 'Failure', error },
 					animals: model.animals,
+					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
 
 			UserClickedRemoveLast: () => ({
 				nextModel: {
-					remoteFetchStatus: model.remoteFetchStatus,
+					remoteFetchStatus: { kind: 'Idle' },
 					animals: model.animals.slice(0, -1),
+					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
 
 			UserClickedRemoveAll: () => ({
 				nextModel: {
-					remoteFetchStatus: model.remoteFetchStatus,
+					remoteFetchStatus: { kind: 'Idle' },
 					animals: [],
+					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
@@ -107,34 +109,55 @@
 							nextModel: {
 								remoteFetchStatus: { kind: 'Loading' },
 								animals: model.animals,
+								selectedAnimal: 'Cat',
 							},
-							nextCommands: [{ kind: 'SelectCats' }, { kind: 'FetchAnimal' }],
+							nextCommands: [{ kind: 'FetchAnimal' }],
 						}),
 
 						d: () => ({
 							nextModel: {
-								remoteFetchStatus: model.remoteFetchStatus,
+								remoteFetchStatus: { kind: 'Loading' },
 								animals: model.animals,
+								selectedAnimal: 'Dog',
 							},
-							nextCommands: [{ kind: 'SelectDogs' }, { kind: 'FetchAnimal' }],
+							nextCommands: [{ kind: 'FetchAnimal' }],
 						}),
 
-						D: () => ({
+						x: () => ({
 							nextModel: {
-								remoteFetchStatus: model.remoteFetchStatus,
+								remoteFetchStatus: { kind: 'Idle' },
+								animals: model.animals.slice(0, -1),
+								selectedAnimal: model.selectedAnimal,
+							},
+							nextCommands: [],
+						}),
+
+						X: () => ({
+							nextModel: {
+								remoteFetchStatus: { kind: 'Idle' },
 								animals: [],
+								selectedAnimal: model.selectedAnimal,
 							},
 							nextCommands: [],
 						}),
 					}
 				),
+
+			UserSelectedAnimal: ({ animal }) => ({
+				nextModel: {
+					remoteFetchStatus: { kind: 'Idle' },
+					animals: model.animals,
+					selectedAnimal: animal,
+				},
+				nextCommands: [],
+			}),
 		})
 
 	// Command Executor
 	const executeCommand = (cmd: Cmd): void =>
 		matchStrict(cmd, {
 			FetchAnimal: () =>
-				fetch(`https://api.the${selectedAnimal}api.com/v1/images/search`)
+				fetch(api)
 					.then(response => response.json())
 					.then(json => {
 						const { success, data, error } = AnimalsResponseSchema.safeParse(json)
@@ -149,8 +172,8 @@
 									error: error.message,
 								})
 					})
-					.catch(err => {
-						processMessage({ kind: 'AnimalsFailedToLoad', error: String(err) })
+					.catch(error => {
+						processMessage({ kind: 'AnimalsFailedToLoad', error: String(error) })
 					}),
 
 			LogInfo: ({ message }) => {
@@ -160,67 +183,57 @@
 			LogError: ({ message }) => {
 				console.error(message)
 			},
-
-			SelectCats: () => {
-				selectedAnimal = 'cat'
-			},
-
-			SelectDogs: () => {
-				selectedAnimal = 'dog'
-			},
 		})
 
 	// Message Processor - a single impure runtime boundary
 	const processMessage = (msg: Msg): void => {
-		const prevModel = $state.snapshot(model)
 		const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
 
+		// Update state
+		model = nextModel
+
+		// Run commands
+		nextCommands.forEach(executeCommand)
+
+		// Update logging state
 		frames = [
 			...frames,
 			{
 				msg,
-				prevModel,
 				nextModel,
-				commands: nextCommands,
+				nextCommands,
 			},
 		]
-
-		model = nextModel
-
-		nextCommands.forEach(executeCommand)
 	}
 
 	// Explicit state
 	let model = $state<Model>({
 		remoteFetchStatus: { kind: 'Idle' },
 		animals: [],
+		selectedAnimal: 'Cat',
 	})
 
 	let frames = $state<Frame[]>([])
 
-	let selectedAnimal = $state<SelectedAnimal>('cat')
-
 	// Derived values
-	let formattedAnimal = $derived<string>(
-		selectedAnimal.at(0)?.toUpperCase() + selectedAnimal.slice(1)
-	)
+	let api = $derived(`https://api.the${model.selectedAnimal}api.com/v1/images/search`)
 
-	let animalsCount: number = $derived(model.animals.length)
+	let animalsCount = $derived(model.animals.length)
 
-	let isLoading: boolean = $derived(model.remoteFetchStatus.kind === 'Loading')
+	let isNoAnimals = $derived(animalsCount === 0)
 
-	let isAnimalRequestFailure: boolean = $derived(
+	let isLoading = $derived(model.remoteFetchStatus.kind === 'Loading')
+
+	let isAnimalRequestFailure = $derived(
 		model.remoteFetchStatus.kind === 'Failure'
 	)
 
-	let isNoAnimals: boolean = $derived(animalsCount === 0)
-
-	let fetchRequestStatusMessage: string | null = $derived(
+	let fetchRequestStatusMessage: string  = $derived(
 		matchStrict(model.remoteFetchStatus, {
-			Idle: () => null,
-			Loading: () => `Loading a new ${selectedAnimal}...`,
+			Idle: () => '',
+			Loading: () => `Loading a new ${model.selectedAnimal.toLowerCase()}...`,
 			Failure: ({ error }) => error,
-			Success: () => null,
+			Success: () => '',
 		})
 	)
 
@@ -229,21 +242,52 @@
 			{ kind: type },
 			{
 				init: () => {
+					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
 					console.log('App Started 🚀')
+					console.log('%cInitial Model:', 'color: deepskyblue;')
+					console.log(
+						'%cremoteFetchStatus:',
+						'color: mediumseagreen;',
+						$state.snapshot(model.remoteFetchStatus)
+					)
+					console.log(
+						'%canimals:',
+						'color: mediumseagreen;',
+						$state.snapshot(model.animals)
+					)
+					console.log(
+						'%cselectedAnimal:',
+						'color: mediumseagreen;',
+						$state.snapshot(model.selectedAnimal)
+					)
+					console.groupEnd()
 				},
 
 				update: () => {
-					const entry = frames.at(-1)
+					const frame = frames.at(-1)
 
-					console.group(`Frame #${frames.length}`)
-					console.log('msg', entry?.msg)
-					console.log('prevModel', {
-						prevModel: entry?.prevModel,
-					})
-					console.log('nextModel', {
-						nextModel: entry?.nextModel,
-					})
-					console.log('commands', entry?.commands)
+					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
+					console.log('%cmsg:', 'color: deepskyblue;', frame?.msg)
+					console.log(
+						'%cremoteFetchStatus:',
+						'color: mediumseagreen;',
+						frame?.nextModel.remoteFetchStatus
+					)
+					console.log(
+						'%canimals:',
+						'color: mediumseagreen;',
+						frame?.nextModel.animals
+					)
+					console.log(
+						'%cselectedAnimal:',
+						'color: mediumseagreen;',
+						frame?.nextModel.selectedAnimal
+					)
+					console.log(
+						'%ccommands:',
+						'color: goldenrod;',
+						JSON.stringify(frame?.nextCommands, null, 2)
+					)
 					console.groupEnd()
 				},
 			}
@@ -258,7 +302,8 @@
 			{
 				c: () => processMessage({ kind: 'UserPressedKey', key: 'c' }),
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
-				D: () => processMessage({ kind: 'UserPressedKey', key: 'D' }),
+				x: () => processMessage({ kind: 'UserPressedKey', key: 'x' }),
+				X: () => processMessage({ kind: 'UserPressedKey', key: 'X' }),
 				_: () => {},
 			}
 		)}
@@ -268,10 +313,19 @@
 	<div class="outer">
 		<div class="inner">
 			<div class="content grid justify-start">
-				<label for="animals">Choose Animal:</label>
-				<select id="animals" bind:value={selectedAnimal}>
-					<option value="cat">Cats</option>
-					<option value="dog">Dogs</option>
+				<label for="animals">Select Animal:</label>
+				<select
+					id="animals"
+					value={model.selectedAnimal}
+					onchange={(e: Event) =>
+						processMessage({
+							kind: 'UserSelectedAnimal',
+							animal: (e?.target as HTMLSelectElement)?.value as SelectedAnimal,
+						})}
+					disabled={isLoading}
+				>
+					<option>Cat</option>
+					<option>Dog</option>
 				</select>
 			</div>
 		</div>
@@ -287,7 +341,7 @@
 						id={animal.id}
 						class="aspect-square object-cover rounded-lg"
 						src={animal.url}
-						alt="random {selectedAnimal}"
+						alt="random {model.selectedAnimal}"
 					/>
 				{/each}
 			</div>
@@ -303,7 +357,7 @@
 					onclick={() => processMessage({ kind: 'UserClickedGetNewAnimal' })}
 					disabled={isLoading}
 				>
-					Get New {formattedAnimal}
+					Get New {model.selectedAnimal}
 				</button>
 
 				<button
