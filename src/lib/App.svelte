@@ -205,6 +205,9 @@
 				nextCommands,
 			},
 		]
+
+		// Always jump to the newest frame
+		frameIndex = frames.length - 1
 	}
 
 	// Explicit state
@@ -216,23 +219,33 @@
 
 	let frames = $state<Frame[]>([])
 
-	// Derived values
-	let api = $derived(`https://api.the${model.selectedAnimal.toLowerCase()}api.com/v1/images/search`)
+	let frameIndex = $state<number>(-1)
 
-	let animalsCount = $derived(model.animals.length)
+	// Derived values
+	let visibleModel = $derived<Model>(
+		frameIndex === frames.length - 1 ? model : frames[frameIndex]?.nextModel
+	)
+
+	let isTimeTraveling = $derived(frameIndex !== frames.length - 1)
+
+	let api = $derived(
+		`https://api.the${visibleModel.selectedAnimal.toLowerCase()}api.com/v1/images/search`
+	)
+
+	let animalsCount = $derived(visibleModel.animals.length)
 
 	let isNoAnimals = $derived(animalsCount === 0)
 
-	let isLoading = $derived(model.remoteFetchStatus.kind === 'Loading')
+	let isLoading = $derived(visibleModel.remoteFetchStatus.kind === 'Loading')
 
 	let isAnimalRequestFailure = $derived(
-		model.remoteFetchStatus.kind === 'Failure'
+		visibleModel.remoteFetchStatus.kind === 'Failure'
 	)
 
-	let fetchRequestStatusMessage: string  = $derived(
-		matchStrict(model.remoteFetchStatus, {
+	let fetchRequestStatusMessage: string = $derived(
+		matchStrict(visibleModel.remoteFetchStatus, {
 			Idle: () => '',
-			Loading: () => `Loading a new ${model.selectedAnimal.toLowerCase()}...`,
+			Loading: () => `Loading a new ${visibleModel.selectedAnimal.toLowerCase()}...`,
 			Failure: ({ error }) => error,
 			Success: () => '',
 		})
@@ -320,13 +333,13 @@
 				<label for="animals">Select Animal:</label>
 				<select
 					id="animals"
-					value={model.selectedAnimal}
+					value={visibleModel.selectedAnimal}
 					onchange={(e: Event) =>
 						processMessage({
 							kind: 'UserSelectedAnimal',
 							animal: (e?.target as HTMLSelectElement)?.value as SelectedAnimal,
 						})}
-					disabled={isLoading} 
+					disabled={isLoading || isTimeTraveling}
 				>
 					<option>Cat</option>
 					<option>Dog</option>
@@ -340,12 +353,12 @@
 	<div class="outer">
 		<div class="inner" style="--inner-padding-block: 0 var(--size-3)">
 			<div class="grid auto-fill gap-1">
-				{#each model.animals as animal}
+				{#each visibleModel.animals as animal}
 					<img
 						id={animal.id}
 						class="aspect-square object-cover rounded-lg"
 						src={animal.url}
-						alt="random {model.selectedAnimal}"
+						alt="random {visibleModel.selectedAnimal}"
 					/>
 				{/each}
 			</div>
@@ -359,21 +372,21 @@
 			<div class="flex flex-wrap items-center gap-0-5">
 				<button
 					onclick={() => processMessage({ kind: 'UserClickedGetNewAnimal' })}
-					disabled={isLoading}
+					disabled={isLoading || isTimeTraveling}
 				>
-					Get New {model.selectedAnimal}
+					Get New {visibleModel.selectedAnimal}
 				</button>
 
 				<button
 					onclick={() => processMessage({ kind: 'UserClickedRemoveLast' })}
-					disabled={isLoading || isNoAnimals}
+					disabled={isLoading || isNoAnimals || isTimeTraveling}
 				>
 					Remove Last
 				</button>
 
 				<button
 					onclick={() => processMessage({ kind: 'UserClickedRemoveAll' })}
-					disabled={isLoading || isNoAnimals}
+					disabled={isLoading || isNoAnimals || isTimeTraveling}
 				>
 					Remove All
 				</button>
@@ -387,6 +400,40 @@
 						<p>{fetchRequestStatusMessage}</p>
 					{/if}
 				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section class="time-travel">
+	<div class="outer">
+		<div class="inner">
+			<div class="flex items-center gap-1 p-2 border rounded">
+				<label>
+					Frame:
+					<input
+						type="number"
+						min="1"
+						max={frames.length}
+						value={frameIndex + 1}
+						oninput={e => {
+							const value = Number((e.target as HTMLInputElement).value) - 1
+							frameIndex = Math.max(value, 0)
+						}}
+					/>
+				</label>
+
+				<button onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}>
+					Undo
+				</button>
+
+				<button
+					onclick={() => (frameIndex = Math.min(frameIndex + 1, frames.length - 1))}
+				>
+					Redo
+				</button>
+
+				<button onclick={() => (frameIndex = frames.length - 1)}> Live </button>
 			</div>
 		</div>
 	</div>
