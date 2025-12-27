@@ -4,6 +4,7 @@
 
 	--size: 1rem;
 	--size-0-5: calc(var(--size) / 2);
+	--size-1-5: calc(var(--size) * 1.5);
 	--size-2: calc(var(--size) * 2);
 	--size-3: calc(var(--size) * 3);
 
@@ -69,6 +70,10 @@ button {
 	}
 }
 
+summary:hover {
+	cursor: pointer;
+}
+
 select {
 	appearance: none;
 	border: none;
@@ -124,12 +129,22 @@ select {
 	padding-block: var(--inner-padding-block);
 }
 
+.flow > * + *{
+	--flow-margin-block-start: var(--size-1-5);
+
+	margin-block-start: var(--flow-margin-block-start);
+}
+
 .grid {
 	display: grid;
 }
 
 .flex {
 	display: flex;
+}
+
+.inline-flex {
+	display: inline-flex;
 }
 
 .flex-wrap {
@@ -156,6 +171,14 @@ select {
 	gap: var(--size-3);
 }
 
+.p-0-5 {
+	padding: var(--size-0-5);
+}
+
+.p-2 {
+	padding: var(--size-2);
+}
+
 .px-4 {
 	padding-inline: 0.5rem;
 }
@@ -164,12 +187,20 @@ select {
 	padding-block: 0.25rem;
 }
 
+.mt-0 {
+	margin-block-start: 0;
+}
+
 .aspect-square {
 	aspect-ratio: 1;
 }
 
 .object-cover {
 	object-fit: cover;
+}
+
+.border {
+	border: 1px solid;
 }
 
 .rounded {

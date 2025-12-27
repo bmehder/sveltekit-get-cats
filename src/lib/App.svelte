@@ -4,8 +4,8 @@
 
 	// Validation Schemas
 	const AnimalResponseSchema = z.object({
-		id: z.string().min(1),
-		url: z.httpUrl().min(32),
+		id: z.string().nonempty(),
+		url: z.httpUrl(),
 	})
 
 	const AnimalsResponseSchema = z.array(AnimalResponseSchema)
@@ -54,50 +54,48 @@
 		| { kind: 'LogInfo'; message: string }
 		| { kind: 'LogError'; message: string }
 
-	// Message -> (NextModel, NextCommand) Mapper
+	// Message -> (NextModel, NextCommand)
 	const computeNextModelAndCommands = (msg: Msg): NextModelAndCommands =>
 		matchStrict(msg, {
 			UserClickedGetNewAnimal: () => ({
 				nextModel: {
+					...model,
 					remoteFetchStatus: { kind: 'Loading' },
-					animals: model.animals,
-					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [{ kind: 'FetchAnimal' }],
 			}),
 
 			AnimalsLoaded: ({ animals }) => ({
 				nextModel: {
+					...model,
 					remoteFetchStatus: { kind: 'Success' },
 					animals: [...model.animals, ...animals],
-					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
 
 			AnimalsFailedToLoad: ({ error }) => ({
 				nextModel: {
+					...model,
 					remoteFetchStatus: { kind: 'Failure', error },
-					animals: model.animals,
-					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
 
 			UserClickedRemoveLast: () => ({
 				nextModel: {
+					...model,
 					remoteFetchStatus: { kind: 'Idle' },
 					animals: model.animals.slice(0, -1),
-					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
 
 			UserClickedRemoveAll: () => ({
 				nextModel: {
+					...model,
 					remoteFetchStatus: { kind: 'Idle' },
 					animals: [],
-					selectedAnimal: model.selectedAnimal,
 				},
 				nextCommands: [],
 			}),
@@ -108,8 +106,8 @@
 					{
 						c: () => ({
 							nextModel: {
+								...model,
 								remoteFetchStatus: { kind: 'Loading' },
-								animals: model.animals,
 								selectedAnimal: 'Cat',
 							},
 							nextCommands: [{ kind: 'FetchAnimal' }],
@@ -117,8 +115,8 @@
 
 						d: () => ({
 							nextModel: {
+								...model,
 								remoteFetchStatus: { kind: 'Loading' },
-								animals: model.animals,
 								selectedAnimal: 'Dog',
 							},
 							nextCommands: [{ kind: 'FetchAnimal' }],
@@ -126,18 +124,18 @@
 
 						x: () => ({
 							nextModel: {
+								...model,
 								remoteFetchStatus: { kind: 'Idle' },
 								animals: model.animals.slice(0, -1),
-								selectedAnimal: model.selectedAnimal,
 							},
 							nextCommands: [],
 						}),
 
 						X: () => ({
 							nextModel: {
+								...model,
 								remoteFetchStatus: { kind: 'Idle' },
 								animals: [],
-								selectedAnimal: model.selectedAnimal,
 							},
 							nextCommands: [],
 						}),
@@ -146,8 +144,8 @@
 
 			UserSelectedAnimal: ({ animal }) => ({
 				nextModel: {
+					...model,
 					remoteFetchStatus: { kind: 'Idle' },
-					animals: model.animals,
 					selectedAnimal: animal,
 				},
 				nextCommands: [],
@@ -392,6 +390,7 @@
 				</button>
 
 				<div>Number of animals: {animalsCount}</div>
+			</div>
 
 				<div class:text-red-600={isAnimalRequestFailure}>
 					{#if isAnimalRequestFailure}
@@ -400,7 +399,6 @@
 						<p>{fetchRequestStatusMessage}</p>
 					{/if}
 				</div>
-			</div>
 		</div>
 	</div>
 </section>
@@ -408,33 +406,36 @@
 <section class="time-travel">
 	<div class="outer">
 		<div class="inner">
-			<div class="flex items-center gap-1 p-2 border rounded">
-				<label>
-					Frame:
+			<details class="flow" open>
+				<summary>Dev Features</summary>
+
+				<div class="inline-flex items-center gap-1">
+					<label for="timeline"> Frame: </label>
 					<input
+						id="timeline"
+						class="p-0-5"
 						type="number"
 						min="1"
 						max={frames.length}
 						value={frameIndex + 1}
+						disabled={frames.length === 0}
 						oninput={e => {
 							const value = Number((e.target as HTMLInputElement).value) - 1
 							frameIndex = Math.max(value, 0)
 						}}
 					/>
-				</label>
-
-				<button onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}>
-					Undo
-				</button>
-
-				<button
-					onclick={() => (frameIndex = Math.min(frameIndex + 1, frames.length - 1))}
-				>
-					Redo
-				</button>
-
-				<button onclick={() => (frameIndex = frames.length - 1)}> Live </button>
-			</div>
+					<button onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}>
+						Undo
+					</button>
+					<button
+						onclick={() =>
+							(frameIndex = Math.min(frameIndex + 1, frames.length - 1))}
+					>
+						Redo
+					</button>
+					<button onclick={() => (frameIndex = frames.length - 1)}> Live </button>
+				</div>
+			</details>
 		</div>
 	</div>
 </section>

@@ -1,173 +1,540 @@
-# SvelteKit Get Cats & Dogs
+# A Svelte-Native Take on The Elm Architecture
 
-This project is a **message-driven, unidirectional architecture** inspired by The Elm Architecture (TEA) for Svelte 5. The core principles are making **state transitions explicit, predictable, and testable**, while **keeping side effects centralized** and easy to reason about.
+This project is a deliberate, minimal exploration of **The Elm Architecture (TEA)** implemented in Svelte — not by mimicking Elm’s APIs, but by preserving its *core ideas* while respecting Svelte’s strengths and constraints.
 
-Users can select between cats and dogs, and the app fetches data accordingly. The design emphasizes **fearless refactoring** through explicit messaging and unidirectional data flow.
-
----
-
-## Core Philosophy
-
-An app is fundamentally **a sequence of state and commands over time**. Each message describes _what happened_, driving pure state transitions and triggering explicit commands that represent real side effects like data fetching.
-
-This philosophy enforces:
-
-- Clear separation between pure logic and side effects
-- Predictable, testable state changes
-- A single source of truth for the app’s state
-- Development-time inspection of the frame history via Svelte 5’s `$inspect(frames)`
+The result is an architecture that is:
+- Explicit
+- Observable
+- Snapshot-based
+- Effect-safe
+- And debuggable without replaying side effects
 
 ---
 
-## Core Ideas
+## Core Goals
 
-The application is built around a few simple but powerful ideas:
+This project is intentionally opinionated.
 
-1. **Messages as the Driver of Change**  
-   All interactions—user input, async results, and external events—are represented as typed messages (`Msg`). Messages describe _what happened_, not _what to do_.
+It aims to demonstrate:
 
-2. **Pure State Transitions**  
-   A single pure function (`computeNextModelAndCommands`) takes a message and returns:
+- A **single impure boundary**
+- **Pure state transitions**
+- **Explicit effects**
+- **Message-driven updates**
+- **Time travel debugging without effect replay**
+- A clear separation between *runtime state* and *historical state*
 
-   - the next `Model`
-   - a list of `Cmd` values describing side effects
-
-3. **Explicit Commands for Side Effects**  
-   Side effects such as HTTP requests are modeled as data (`Cmd`) and interpreted in exactly one place. Logging commands are not recommended except for possible temporary debugging.
-
-4. **Unidirectional Data Flow**
-
-   ```
-   View → Msg → (Next Model + Next Commands) → (Replace Model + Run Commands) → Derived State → View
-   ```
-
-   Data flows in one direction. There are no hidden mutations or implicit effects.
-
-5. **Development-Time Frame Inspection**  
-   Using Svelte 5’s `$inspect(frames)`, the app records and exposes a history of frames (state snapshots, messages, and commands) during development, enabling easier debugging and understanding of state evolution over time.
+What it does **not** aim to do:
+- Recreate Elm inside Svelte
+- Hide complexity behind helpers or macros
+- Depend on framework magic for correctness
 
 ---
 
-## Types
+## The Big Picture
 
-The core protocol of the app remains:
+At a high level, the app is structured around five concepts:
 
-- `Model` — the complete state of the application, including HTTP request status and fetched data
-- `Msg` — all valid messages the app can respond to
-- `Cmd` — explicit descriptions of side effects
-- `NextModelAndCommands` — the pair of model and command results from handling a message
-- `Frame` — the recorded sequence of message and state snapshots for development-time inspection
+1. **Model** — the complete state of the application
+2. **Msg** — all possible events that can affect the model
+3. **Update** — a pure function that computes the next model
+4. **Cmd** — descriptions of side effects
+5. **Runtime** — the only place effects are executed
+
+This should feel familiar if you know Elm — but the way these pieces are *wired* is intentionally Svelte-native.
 
 ---
 
-## Message Handling
+## The Model
 
-At the heart of the app is a pure transition function:
+The `Model` represents the *entire* application state at a point in time.
 
 ```ts
-const computeNextModelAndCommands = (msg: Msg): NextModelAndCommands => { ... }
-```
-
-This function:
-
-- does not mutate state
-- does not perform side effects
-- describes _what the next state should be_ and _which commands should run_
-
-Pattern matching is done with `matchStrict`, so every valid message must be handled explicitly. This enforces comprehensive handling and guides refactoring.
-
----
-
-## Commands (Explicit Side Effects Only)
-
-Side effects are modeled as a focused `Cmd` union:
-
-```ts
-type Cmd =
-   | { kind: 'SelectCats' }
-   | { kind: 'SelectDogs' }
-   | { kind: 'FetchAnimal' }
-```
-
-Commands are **not part of the model**. They are instructions for the runtime to perform real side effects such as HTTP fetching.
-
-A single interpreter function executes commands:
-
-```ts
-const executeCommand = (cmd: Cmd): void => {
-	// perform the fetch effect
+type Model = {
+	selectedAnimal: SelectedAnimal
+	animals: Animal[]
+	remoteFetchStatus: RemoteFetchStatus
 }
 ```
 
-This keeps all impure behavior localized and auditable.
+There is exactly one live model at runtime:
+
+```ts
+let model = $state<Model>({...})
+```
+
+This model always represents **now**.
 
 ---
 
-## External Events as Messages
+## Messages (`Msg`)
 
-User interactions, keyboard shortcuts, and async fetch results are all turned into messages:
+All state changes flow through explicit messages.
 
-- Keyboard shortcuts dispatch messages
-- Fetch success or failure dispatch messages
+```ts
+type Msg =
+	| { kind: 'UserSelectedAnimal'; animal: SelectedAnimal }
+	| { kind: 'UserClickedGetNewAnimal' }
+	| { kind: 'UserClickedRemoveLast' }
+	| { kind: 'UserClickedRemoveAll' }
+	| { kind: 'RemoteFetchSucceeded'; animal: Animal }
+	| { kind: 'RemoteFetchFailed'; error: string }
+```
 
-This keeps the entire control flow explicit and centralized.
+Messages are:
+- Finite
+- Serializable
+- Observable
+- Easy to log and inspect
 
----
-
-## Project Structure
-
-The main component is organized into these sections:
-
-- Validation Schemas (Zod) for runtime safety and inferred types
-- Types (Model, Msg, Cmd, Frame, etc.)
-- Model (state)
-- Derived State (pure projections for the view)
-- Next Model + Commands (pure transition)
-- Command Interpreter (side effects)
-- Message Entry Point (orchestration)
-- View (Svelte template)
-
-Keeping these concepts close together makes the architecture easy to follow and modify.
+No state changes happen outside a message.
 
 ---
 
-## Why This Approach?
+## Pure Updates
 
-This project prioritizes:
+All application logic lives in a pure function:
 
-- **Fearless refactoring:** The explicit, typed message-driven design means adding or changing features guides you to all necessary updates.
-- **Explicit control flow:** No hidden state mutations or implicit effects.
-- **Testability:** Pure state transitions can be tested in isolation.
-- **Clarity:** Side effects are explicit and localized.
-- **Development tooling:** Using Svelte 5’s `$inspect(frames)` to trace frame history during development.
+```ts
+function computeNextModelAndCommands(msg: Msg): [Model, Cmd[]]
+```
 
----
+This function:
+- Never performs effects
+- Never mutates the model
+- Returns the next model *and* a list of commands
 
-## What This Is (and Isn’t)
-
-This project is:
-
-- ✔️ An experimental exploration of TEA-style ideas in Svelte
-- ✔️ A demonstration of explicit state machines in UI code
-- ✔️ A foundation for experimentation and learning
-
-It is **not**:
-
-- A full framework or runtime
-- A replacement for idiomatic Svelte in simple cases
-- A complete Elm runtime reimplementation
-
-The goal is clarity, not abstraction for its own sake.
+This mirrors Elm’s `update` function in spirit.
 
 ---
 
-## Notes
+## Commands (`Cmd`)
 
-This codebase favors:
+Commands describe *what should happen*, not *how it happens*.
 
-- Explicit over implicit behavior
-- Typed protocols over ad-hoc state
-- Centralized side effects limited to real effects
-- Confidence when refactoring
+```ts
+type Cmd =
+	| { kind: 'FetchAnimal'; url: string }
+```
 
-If you’re interested in functional state modeling, exhaustive pattern matching, or applying Elm-inspired ideas in a Svelte context, this project is meant to be a readable and adaptable starting point.
+Commands are data — not promises, not callbacks, not effects.
+
+---
+
+## The Runtime Boundary
+
+The **only impure function** that is allowed to advance application state is `processMessage`.
+
+```ts
+function processMessage(msg: Msg) {
+   const { nextModel, nextCommands } = computeNextModelAndCommands(msg)
+
+   model = nextModel
+
+   nextCommands.forEach(executeCommand)
+
+   frames = [
+      ...frames,
+      {
+         msg,
+         nextModel,
+         nextCommands,
+      },
+   ]
+
+   frameIndex = frames.length - 1
+}
+```
+
+This function is responsible for:
+- Applying the next model
+- Executing commands
+- Recording history
+
+This is the architectural heart of the app.
+
+---
+
+## The Application Lifecycle
+
+One of the primary benefits of this architecture is that the **entire lifecycle of the application is explicit, predictable, and unidirectional**.
+
+There is exactly one way the app moves forward in time.
+
+### 1. An Event Occurs
+
+An event originates from one of two places:
+
+- A **user interaction** (clicks, input changes, key presses)
+- An **external result** (such as a network response)
+
+In both cases, the event is immediately translated into a `Msg`.
+
+Nothing else is allowed to affect state.
+
+---
+
+### 2. A Message Is Processed
+
+Every `Msg` flows into the same entry point:
+
+```ts
+processMessage(msg)
+```
+
+This function is the **gatekeeper of time**.  
+If state changes, it happens here — and only here.
+
+---
+
+### 3. State Advances Purely
+
+Inside the runtime boundary, the message is handed to the pure update logic:
+
+```ts
+computeNextModelAndCommands(msg)
+```
+
+This step:
+- Computes the next model deterministically
+- Describes any effects that should occur
+- Performs no I/O
+- Has no hidden dependencies
+
+Given the same inputs, it always produces the same outputs.
+
+---
+
+### 4. The Model Is Replaced
+
+The live model is replaced wholesale:
+
+```ts
+model = nextModel
+```
+
+There is no mutation, patching, or partial updates.
+
+Time advances by replacement, not modification.
+
+---
+
+### 5. Effects Are Executed Once
+
+Any returned commands are executed by the runtime:
+
+```ts
+nextCommands.forEach(executeCommand)
+```
+
+Effects:
+- Are triggered only once
+- Never feed back into state directly
+- Can only influence the app by emitting a *new* `Msg`
+
+This keeps side effects honest and observable.
+
+---
+
+### 6. History Is Recorded
+
+Each processed message produces an immutable frame:
+
+```ts
+{ msg, nextModel, nextCommands }
+```
+
+History is:
+- Append-only
+- Never recomputed
+- Never replayed
+
+The past is a fact, not a function.
+
+---
+
+### 7. Rendering Is a Pure Projection
+
+The UI renders from a derived value:
+
+```ts
+visibleModel
+```
+
+Rendering:
+- Never mutates state
+- Never triggers effects
+- Is a pure projection of data → view
+
+Time travel simply selects a different snapshot to project.
+
+---
+
+## Why This Matters
+
+Because state only moves in one direction:
+
+```
+View → Event → Msg → Update → [Model, (Commands → Msg)] → View
+```
+
+The system gains:
+
+- Predictable behavior
+- Debuggable execution
+- Deterministic state transitions
+- Confidence that “what you see” is “what happened”
+
+There are no shortcuts, side channels, or hidden control flow.
+
+Time only moves forward — and when you look back, you see exactly what occurred.
+
+---
+
+## Frame Recording (Event Sourcing Lite)
+
+Every processed message produces a **frame**:
+
+```ts
+type Frame = {
+	msg: Msg
+	nextModel: Model
+	nextCommands: Cmd[]
+}
+```
+
+Frames are stored immutably:
+
+```ts
+let frames = $state<Frame[]>([])
+```
+
+Each frame represents:
+> “What the app looked like *after* this message.”
+
+These snapshots power the debugger.
+
+---
+
+## Developer Instrumentation with `$inspect`
+
+This project intentionally leverages Svelte’s **dev-only `$inspect` rune** to make the internal execution of the architecture *visible* during development.
+
+Each recorded frame is logged to the console in a structured, readable format, showing:
+
+- The frame number
+- The triggering `Msg`
+- The resulting model snapshot
+- Any commands that were produced
+
+This allows you to observe the exact progression of application state over time, frame by frame.
+
+Because `$inspect` is:
+- **Development-only**
+- **Side-effect free**
+- **Non-invasive**
+
+…it fits naturally into the architecture without compromising purity or runtime behavior.
+
+---
+
+### Why `$inspect` Works So Well Here
+
+The architecture already guarantees that:
+
+- Every state transition is explicit
+- Every transition produces a complete snapshot
+- Time advances in discrete, inspectable steps
+
+`$inspect` simply *surfaces* that structure.
+
+Rather than logging ad hoc values, the debugger logs **meaningful architectural events** — the same frames used by the time travel debugger.
+
+This makes the console output a first-class debugging tool, not an afterthought.
+
+---
+
+### Production Safety
+
+Because `$inspect` is stripped in production builds:
+
+- There is no performance cost
+- There is no runtime branching
+- There is no risk of leaking debug behavior
+
+The instrumentation exists purely to aid understanding during development.
+
+In other words, the same code that powers time travel also powers the console — and disappears cleanly when it’s no longer needed.
+
+---
+
+## Time Travel Debugging (Without Effect Replay)
+
+Time travel is **observational only**.
+
+- Effects are **never replayed**
+- History is immutable
+- The debugger only selects snapshots
+
+The key derived value is:
+
+```ts
+let visibleModel = $derived<Model>(
+	frameIndex === frames.length - 1
+		? model
+		: frames[frameIndex].nextModel
+)
+```
+
+The UI renders from `visibleModel`, not from `model`.
+
+This keeps:
+- runtime state honest
+- history safe
+- side effects one-shot
+
+---
+
+## Why Effects Are Not Replayed
+
+Replaying effects:
+- breaks idempotence
+- re-triggers network calls
+- introduces non-determinism
+
+Instead, this architecture treats effects as:
+> “Things that happened once — and are now facts of history.”
+
+This mirrors real systems and event sourcing principles.
+
+---
+
+## Why This Isn’t “Just Elm in Svelte”
+
+Elm enforces its architecture at the language level.
+
+This project:
+- Enforces it by **discipline**
+- Makes boundaries visible
+- Leaves escape hatches open — but obvious
+
+You can violate the rules.
+You can also see *exactly when you do*.
+
+---
+
+## Takeaway
+
+This architecture shows that:
+
+> You don’t need Elm to think in *The Elm Architecture*.
+
+You need:
+- explicit messages
+- pure transitions
+- honest effects
+- and respect for time
+
+Svelte becomes the *host*, not the boss.
+
+---
+
+## Who This Is For
+
+This project is for developers who:
+- Like Elm’s ideas
+- Live in the JS/TS ecosystem
+- Want debuggability without magic
+- Prefer clarity over cleverness
+
+If that’s you — welcome.
+
+---
+
+## Design Constraints
+
+This architecture is guided by a small set of intentional constraints:
+
+1. All state changes must originate from a `Msg`
+1. All state transitions must be pure
+1. Side effects must be described, not performed
+1. Effects may only run once (per Message)
+1. Historical state must never be recomputed
+
+These rules are not enforced by the framework.
+They are enforced by **discipline, structure, and visibility**.
+
+Breaking them is possible — and obvious.
+
+---
+
+## What This Architecture Is Not Optimized For
+
+This approach is intentionally not a universal solution.
+
+It may not be ideal for:
+
+- Extremely high-frequency state updates
+- Highly local, ephemeral UI-only state
+- Scenarios that require effect replay or speculative execution
+
+The tradeoff is deliberate:  
+**clarity, debuggability, and temporal correctness** over raw convenience.
+
+---
+
+## A Simple Mental Model
+
+At its core, the system moves in one direction:
+
+```
+User Action
+   ↓
+Msg
+   ↓
+computeNextModelAndCommands
+   ↓
+[ nextModel, Cmd[] ]
+   ↓
+Model Replacement
+   ↓
+Command Execution
+   ↓
+New Msg (optional)
+```
+
+There are no shortcuts.
+There is no hidden control flow.
+Every transition is explicit.
+
+---
+
+## Scaling the Architecture
+
+As applications grow, this architecture scales by:
+
+- Splitting `Msg` into domain-specific message unions
+- Composing update logic by feature or concern
+- Grouping commands by responsibility rather than by component
+
+The core rule never changes:
+state changes through messages, and time flows forward.
+
+---
+
+## Naming the Approach
+
+This project demonstrates an opinionated, Svelte-native interpretation of The Elm Architecture.
+
+For clarity and reference, this approach is referred to as:
+
+**SvelteTEA** (pronounced *“Sveltey”*)
+
+SvelteTEA is not a framework or a library, it is a set of architectural commitments.
+
+If you follow the rules, you get:
+- Predictable state
+- Honest effects
+- Observable history
+
+If you break the rules, you can see exactly where — and why.
