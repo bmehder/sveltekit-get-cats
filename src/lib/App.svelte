@@ -2,6 +2,7 @@
 	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
 	import { fade } from 'svelte/transition'
+	import Header from './Header.svelte'
 
 	// Validation Schemas
 	const AnimalResponseSchema = z.object({
@@ -49,7 +50,6 @@
 		| { kind: 'UserClickedRemoveAll' }
 		| { kind: 'UserPressedKey'; key: KeyboardShortcut }
 		| { kind: 'UserSelectedAnimal'; animal: SelectedAnimal }
-		| { kind: 'Noop' }
 
 	type Cmd =
 		| { kind: 'FetchAnimal' }
@@ -102,6 +102,15 @@
 				nextCommands: [],
 			}),
 
+			UserSelectedAnimal: ({ animal }) => ({
+				nextModel: {
+					...model,
+					remoteFetchStatus: { kind: 'Idle' },
+					selectedAnimal: animal,
+				},
+				nextCommands: [],
+			}),
+
 			UserPressedKey: ({ key }) =>
 				matchStrict(
 					{ kind: key },
@@ -143,20 +152,6 @@
 						}),
 					}
 				),
-
-			UserSelectedAnimal: ({ animal }) => ({
-				nextModel: {
-					...model,
-					remoteFetchStatus: { kind: 'Idle' },
-					selectedAnimal: animal,
-				},
-				nextCommands: [],
-			}),
-
-			Noop: () => ({
-				nextModel: {...model},
-				nextCommands: []
-			})
 		})
 
 	// Command Executor
@@ -326,125 +321,137 @@
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
 				x: () => processMessage({ kind: 'UserPressedKey', key: 'x' }),
 				X: () => processMessage({ kind: 'UserPressedKey', key: 'X' }),
-				_: () => processMessage({ kind: 'Noop' }),
+				_: () => {},
 			}
 		)}
 />
 
-<section>
-	<div class="outer">
-		<div class="inner">
-			<div class="content grid justify-start">
-				<label for="animals">Select Animal:</label>
-				<select
-					id="animals"
-					value={visibleModel.selectedAnimal}
-					onchange={(e: Event) =>
-						processMessage({
-							kind: 'UserSelectedAnimal',
-							animal: (e?.target as HTMLSelectElement)?.value as SelectedAnimal,
-						})}
-					disabled={isLoading || isTimeTraveling}
-				>
-					<option>Cat</option>
-					<option>Dog</option>
-				</select>
-			</div>
-		</div>
-	</div>
-</section>
+<div class="wrapper">
+	<Header></Header>
 
-<section>
-	<div class="outer">
-		<div class="inner" style="--inner-padding-block: 0 var(--size-3)">
-			<div class="grid auto-fill gap-1">
-				{#each visibleModel.animals as animal}
-					<img
-						id={animal.id}
-						class="aspect-square object-cover rounded-lg"
-						src={animal.url}
-						alt="random {visibleModel.selectedAnimal}"
-						transition:fade
-					/>
-				{/each}
-			</div>
-		</div>
-	</div>
-</section>
-
-<section>
-	<div class="outer">
-		<div class="inner" style="--inner-padding-block: 0;">
-			<div class="flex flex-wrap items-center gap-0-5">
-				<button
-					onclick={() => processMessage({ kind: 'UserClickedGetNewAnimal' })}
-					disabled={isLoading || isTimeTraveling}
-				>
-					Get New {visibleModel.selectedAnimal}
-				</button>
-
-				<button
-					onclick={() => processMessage({ kind: 'UserClickedRemoveLast' })}
-					disabled={isLoading || isNoAnimals || isTimeTraveling}
-				>
-					Remove Last
-				</button>
-
-				<button
-					onclick={() => processMessage({ kind: 'UserClickedRemoveAll' })}
-					disabled={isLoading || isNoAnimals || isTimeTraveling}
-				>
-					Remove All
-				</button>
-
-				<div>Number of animals: {animalsCount}</div>
-			</div>
-
-			<div class:text-red-600={isAnimalRequestFailure}>
-				{#if isAnimalRequestFailure}
-					<pre>{fetchRequestStatusMessage}</pre>
-				{:else}
-					<p>{fetchRequestStatusMessage}</p>
-				{/if}
-			</div>
-		</div>
-	</div>
-</section>
-
-<section class="time-travel">
-	<div class="outer">
-		<div class="inner">
-			<details class="flow" open>
-				<summary>Time Travel Debugging</summary>
-
-				<div class="inline-flex flex-wrap items-center gap-1">
-					<label for="timeline"> Frame: </label>
-					<input
-						id="timeline"
-						class="p-0-5"
-						type="number"
-						min="1"
-						max={frames.length}
-						value={frameIndex + 1}
-						disabled={frames.length === 0}
-						oninput={e => {
-							const raw = Number((e.target as HTMLInputElement).value) - 1
-
-							frameIndex = Math.min(Math.max(raw, 0), frames.length - 1)
-						}}
-					/>
-					<button onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}>
-						Undo
-					</button>
-					<button
-						onclick={() =>
-							(frameIndex = Math.min(frameIndex + 1, frames.length - 1))}
-					>
-						Redo
-					</button>
-					<button onclick={() => (frameIndex = frames.length - 1)}> Live </button>
+	<main>
+		<section>
+			<div class="outer">
+				<div class="inner">
+					<div class="content grid justify-start">
+						<label for="animals">Select Animal:</label>
+						<select
+							id="animals"
+							value={visibleModel.selectedAnimal}
+							onchange={(e: Event) =>
+								processMessage({
+									kind: 'UserSelectedAnimal',
+									animal: (e?.target as HTMLSelectElement)?.value as SelectedAnimal,
+								})}
+							disabled={isLoading || isTimeTraveling}
+						>
+							<option>Cat</option>
+							<option>Dog</option>
+						</select>
+					</div>
 				</div>
-			</details>
+			</div>
+		</section>
+
+		<section>
+			<div class="outer">
+				<div class="inner" style="--inner-padding-block: 0 var(--size-3)">
+					<div class="grid auto-fill gap-1">
+						{#each visibleModel.animals as animal}
+							<img
+								id={animal.id}
+								class="aspect-square object-cover rounded-lg"
+								src={animal.url}
+								alt="random {visibleModel.selectedAnimal}"
+								transition:fade
+							/>
+						{/each}
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section>
+			<div class="outer">
+				<div class="inner">
+					<div class="flex flex-wrap items-center gap-0-5">
+						<button
+							onclick={() => processMessage({ kind: 'UserClickedGetNewAnimal' })}
+							disabled={isLoading || isTimeTraveling}
+						>
+							Get New {visibleModel.selectedAnimal}
+						</button>
+
+						<button
+							onclick={() => processMessage({ kind: 'UserClickedRemoveLast' })}
+							disabled={isLoading || isNoAnimals || isTimeTraveling}
+						>
+							Remove Last
+						</button>
+
+						<button
+							onclick={() => processMessage({ kind: 'UserClickedRemoveAll' })}
+							disabled={isLoading || isNoAnimals || isTimeTraveling}
+						>
+							Remove All
+						</button>
+
+						<div>Number of animals: {animalsCount}</div>
+					</div>
+
+					<div class:text-red-600={isAnimalRequestFailure}>
+						{#if isAnimalRequestFailure}
+							<pre>{fetchRequestStatusMessage}</pre>
+						{:else}
+							<p>{fetchRequestStatusMessage}</p>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<footer class="time-travel">
+		<div class="outer bg-slate-900">
+			<div class="inner">
+				<div class="content flow">
+					<h2>Time Travel Debugger</h2>
+					<div class="flex flex-wrap items-center gap-1">
+						<label for="timeline">Frame: {frameIndex + 1}</label>
+						<input
+							id="timeline"
+							class="p-0-5"
+							type="range"
+							min="1"
+							max={frames.length}
+							value={frameIndex + 1}
+							disabled={frames.length === 0}
+							oninput={e => {
+								frameIndex = Number((e.target as HTMLInputElement).value) - 1
+							}}
+						/>
+						<button
+							onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}
+							disabled={frames.length === 0 || frameIndex === 0}
+						>
+							Undo
+						</button>
+						<button
+							onclick={() =>
+								(frameIndex = Math.min(frameIndex + 1, frames.length - 1))}
+							disabled={frames.length === 0}
+						>
+							Redo
+						</button>
+						<button
+							onclick={() => (frameIndex = frames.length - 1)}
+							disabled={frames.length === 0}
+						>
+							Live
+						</button>
+					</div>
+				</div>
+			</div>
 		</div>
-	</div>
-</section>
+	</footer>
+</div>
