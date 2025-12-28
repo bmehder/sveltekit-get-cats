@@ -49,6 +49,7 @@
 		| { kind: 'UserClickedRemoveAll' }
 		| { kind: 'UserPressedKey'; key: KeyboardShortcut }
 		| { kind: 'UserSelectedAnimal'; animal: SelectedAnimal }
+		| { kind: 'Noop' }
 
 	type Cmd =
 		| { kind: 'FetchAnimal' }
@@ -151,6 +152,11 @@
 				},
 				nextCommands: [],
 			}),
+
+			Noop: () => ({
+				nextModel: {...model},
+				nextCommands: []
+			})
 		})
 
 	// Command Executor
@@ -320,7 +326,7 @@
 				d: () => processMessage({ kind: 'UserPressedKey', key: 'd' }),
 				x: () => processMessage({ kind: 'UserPressedKey', key: 'x' }),
 				X: () => processMessage({ kind: 'UserPressedKey', key: 'X' }),
-				_: () => {},
+				_: () => processMessage({ kind: 'Noop' }),
 			}
 		)}
 />
@@ -409,7 +415,7 @@
 	<div class="outer">
 		<div class="inner">
 			<details class="flow" open>
-				<summary>Dev Features</summary>
+				<summary>Time Travel Debugging</summary>
 
 				<div class="inline-flex flex-wrap items-center gap-1">
 					<label for="timeline"> Frame: </label>

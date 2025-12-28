@@ -108,6 +108,104 @@ This mirrors Elm’s `update` function in spirit.
 
 ---
 
+## Pattern Matching Instead of Conditionals
+
+One deliberate choice in this architecture is the **absence of `if`, `switch`, and nullish checks** in core application logic.
+
+Instead, all branching is expressed through **pattern matching** using `match` and `matchStrict` from CanaryJS.
+
+This shifts control flow from *statements* to *data*.
+
+---
+
+## Why Avoid Conditionals?
+
+Traditional conditional logic often leads to:
+
+- Defensive null checks
+- Implicit “impossible” states
+- Silent fallthroughs
+- Branches that drift out of sync with data over time
+
+In contrast, pattern matching makes control flow **explicit, exhaustive, and data-driven**.
+
+---
+
+## `match`: Open, Intentional Fallbacks
+
+`match` is used when a fallback branch is acceptable or intentional.
+
+```ts
+match(state, {
+	SomeCase: (s) => { ... },
+	AnotherCase: (s) => { ... },
+	_: (s) => { ... } // explicit fallback
+})
+```
+
+Key properties:
+
+- Branches are keyed by `kind`
+- Each branch receives a correctly typed value
+- The `_` case is **explicit**, not implicit
+
+This makes “default behavior” a conscious design decision.
+
+---
+
+## `matchStrict`: Exhaustiveness as a Constraint
+
+`matchStrict` is used when *all cases must be handled*.
+
+```ts
+matchStrict(msg, {
+	UserClickedGetNewAnimal: (m) => { ... },
+	UserClickedRemoveLast: (m) => { ... },
+	UserClickedRemoveAll: (m) => { ... },
+})
+```
+
+Key properties:
+
+- No fallback branch
+- Missing cases are caught at compile time
+- Adding a new `Msg` forces all consumers to update
+
+This turns exhaustiveness into a **structural guarantee**, not a convention.
+
+---
+
+## Eliminating Nullish States
+
+Because all state transitions flow through typed messages and pattern matching:
+
+- There is no need for `if (x != null)`
+- There are no “half-handled” states
+- Impossible states are unrepresentable
+
+The shape of the data *is* the control flow.
+
+---
+
+## Why This Fits SvelteTEA
+
+Pattern matching aligns naturally with SvelteTEA’s goals:
+
+- Messages are explicit
+- State transitions are pure
+- Time advances in discrete steps
+- History is inspectable
+
+By replacing conditionals with pattern matching, the architecture becomes:
+
+- More declarative
+- More refactor-safe
+- Easier to reason about over time
+
+Control flow stops being a guessing game and becomes a property of the data itself.
+
+---
+
 ## Commands (`Cmd`)
 
 Commands describe *what should happen*, not *how it happens*.
