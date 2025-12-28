@@ -291,7 +291,70 @@ Time only moves forward — and when you look back, you see exactly what occurre
 
 ---
 
-## Frame Recording (Event Sourcing Lite)
+## Frames as Data Over Time
+
+At its core, this architecture treats the application as **data evolving over time**.
+
+Instead of thinking in terms of mutable state, it helps to think in terms of **frames** — discrete, immutable snapshots that capture *what happened* and *what the app became* as a result.
+
+Each frame contains three things:
+
+```
+┌───────────────┐
+│     Frame     │
+├───────────────┤
+│ Msg           │  ← what happened
+│ nextModel     │  ← what the app became
+│ nextCommands  │  ← what should happen next
+└───────────────┘
+```
+
+Over time, the app becomes a sequence of these frames:
+
+```
+Frame 0 ──► Frame 1 ──► Frame 2 ──► Frame 3 ──► …
+```
+
+Each arrow represents **one message being processed**.
+
+---
+
+### A Concrete Timeline
+
+Visually, this looks like:
+
+```
+[ Msg₀ ] ─► [ Model₀ , Cmd₀ ]
+            ↓
+[ Msg₁ ] ─► [ Model₁ , Cmd₁ ]
+            ↓
+[ Msg₂ ] ─► [ Model₂ , Cmd₂ ]
+            ↓
+          (current)
+```
+
+Important properties of this timeline:
+
+- Frames are **append-only**
+- Past frames are **never changed**
+- State is always derived from a specific frame
+- The present is just the *last frame*
+
+---
+
+### Why This Mental Model Matters
+
+Thinking in frames makes several things explicit:
+
+- The app is not “in a state” — it is *at a point in time*
+- Debugging becomes inspecting *history*, not guessing causes
+- Time travel is selecting data, not replaying logic
+- Effects are associated with moments, not state
+
+This is why time travel in this architecture is safe, honest, and deterministic.
+
+The app is not a black box.
+It is a **timeline of facts**.
 
 Every processed message produces a **frame**:
 

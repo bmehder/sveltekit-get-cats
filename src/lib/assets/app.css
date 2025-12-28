@@ -10,13 +10,15 @@
 
 	--cloud-dancer: #f0eee9;
 	--slate-800: #1f2937;
+	--slate-900: oklch(0.208 0.042 265.755);
 }
 
 body {
-	font-family: sans-serif;
-	line-height: 1.5;
+	margin: 0;
 	background-color: var(--slate-800);
 	color: var(--cloud-dancer);
+	font-family: sans-serif;
+	line-height: 1.5;
 }
 
 img {
@@ -135,6 +137,18 @@ select {
 	margin-block-start: var(--flow-margin-block-start);
 }
 
+.w-2 {
+	inline-size: var(--size-2);
+}
+
+.h-2 {
+	block-size: var(--size-2);
+}
+
+.block {
+	display: block;
+}
+
 .grid {
 	display: grid;
 }
@@ -155,8 +169,16 @@ select {
 	justify-content: start;
 }
 
+.justify-between {
+	justify-content: space-between;
+}
+
 .items-center {
 	align-items: center;
+}
+
+.items-end {
+	align-items: end;
 }
 
 .gap-0-5 {
@@ -181,6 +203,10 @@ select {
 
 .px-4 {
 	padding-inline: 0.5rem;
+}
+
+.pb-0 {
+	padding-block-end: 0;
 }
 
 .py-2 {
@@ -213,6 +239,10 @@ select {
 
 .text-red-600 {
 	color: #fc8181;
+}
+
+.bg-slate-900 {
+	background-color: var(--slate-900);
 }
 
 .auto-fill {

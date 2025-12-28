@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
+	import { fade } from 'svelte/transition'
 
 	// Validation Schemas
 	const AnimalResponseSchema = z.object({
@@ -357,6 +358,7 @@
 						class="aspect-square object-cover rounded-lg"
 						src={animal.url}
 						alt="random {visibleModel.selectedAnimal}"
+						transition:fade
 					/>
 				{/each}
 			</div>
@@ -392,13 +394,13 @@
 				<div>Number of animals: {animalsCount}</div>
 			</div>
 
-				<div class:text-red-600={isAnimalRequestFailure}>
-					{#if isAnimalRequestFailure}
-						<pre>{fetchRequestStatusMessage}</pre>
-					{:else}
-						<p>{fetchRequestStatusMessage}</p>
-					{/if}
-				</div>
+			<div class:text-red-600={isAnimalRequestFailure}>
+				{#if isAnimalRequestFailure}
+					<pre>{fetchRequestStatusMessage}</pre>
+				{:else}
+					<p>{fetchRequestStatusMessage}</p>
+				{/if}
+			</div>
 		</div>
 	</div>
 </section>
@@ -409,7 +411,7 @@
 			<details class="flow" open>
 				<summary>Dev Features</summary>
 
-				<div class="inline-flex items-center gap-1">
+				<div class="inline-flex flex-wrap items-center gap-1">
 					<label for="timeline"> Frame: </label>
 					<input
 						id="timeline"
@@ -420,8 +422,9 @@
 						value={frameIndex + 1}
 						disabled={frames.length === 0}
 						oninput={e => {
-							const value = Number((e.target as HTMLInputElement).value) - 1
-							frameIndex = Math.max(value, 0)
+							const raw = Number((e.target as HTMLInputElement).value) - 1
+
+							frameIndex = Math.min(Math.max(raw, 0), frames.length - 1)
 						}}
 					/>
 					<button onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}>
