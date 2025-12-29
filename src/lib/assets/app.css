@@ -186,6 +186,7 @@ select {
 
 	&:disabled::-webkit-slider-runnable-track {
 		background: var(--slate-950);
+		cursor: not-allowed;
 	}
 
 	&:disabled::-webkit-slider-thumb {
@@ -212,10 +213,10 @@ select {
 }
 
 .inner {
-	--inner-width: var(--size-3);
+	--inner-inline-size: var(--size-3);
 	--inner-padding-block: var(--size-3);
 
-	width: min(100% - var(--inner-width), var(--lg));
+	inline-size: min(100% - var(--inner-inline-size), var(--lg));
 	margin-inline: auto;
 	padding-block: var(--inner-padding-block);
 }

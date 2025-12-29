@@ -2,7 +2,8 @@
 	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
 	import { fade } from 'svelte/transition'
-	import Header from './Header.svelte'
+	import Header from '$lib/Header.svelte'
+	import TimeTravel from '$lib/TimeTravel.svelte'
 
 	// Validation Schemas
 	const AnimalResponseSchema = z.object({
@@ -225,15 +226,15 @@
 	let visibleModel = $derived<Model>(
 		frameIndex === frames.length - 1 ? model : frames[frameIndex]?.nextModel
 	)
-
-	let isTimeTraveling = $derived(frameIndex !== frames.length - 1)
-
+	
 	let api = $derived(
 		`https://api.the${visibleModel.selectedAnimal.toLowerCase()}api.com/v1/images/search`
 	)
-
+	
 	let animalsCount = $derived(visibleModel.animals.length)
-
+	
+	let isTimeTraveling = $derived(frameIndex !== frames.length - 1)
+	
 	let isNoAnimals = $derived(animalsCount === 0)
 
 	let isLoading = $derived(visibleModel.remoteFetchStatus.kind === 'Loading')
@@ -411,47 +412,5 @@
 		</section>
 	</main>
 
-	<footer class="time-travel">
-		<div class="outer bg-slate-900">
-			<div class="inner">
-				<div class="content flow">
-					<h2>Time Travel Debugger</h2>
-					<div class="flex flex-wrap items-center gap-1">
-						<label for="timeline">Frame: {frameIndex + 1}</label>
-						<input
-							id="timeline"
-							class="p-0-5"
-							type="range"
-							min="1"
-							max={frames.length}
-							value={frameIndex + 1}
-							disabled={frames.length === 0}
-							oninput={e => {
-								frameIndex = Number((e.target as HTMLInputElement).value) - 1
-							}}
-						/>
-						<button
-							onclick={() => (frameIndex = Math.max(frameIndex - 1, 0))}
-							disabled={frames.length === 0 || frameIndex === 0}
-						>
-							Undo
-						</button>
-						<button
-							onclick={() =>
-								(frameIndex = Math.min(frameIndex + 1, frames.length - 1))}
-							disabled={frames.length === 0}
-						>
-							Redo
-						</button>
-						<button
-							onclick={() => (frameIndex = frames.length - 1)}
-							disabled={frames.length === 0}
-						>
-							Live
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
-	</footer>
+	<TimeTravel {frames} bind:frameIndex></TimeTravel>
 </div>
