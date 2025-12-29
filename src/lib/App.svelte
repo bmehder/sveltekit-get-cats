@@ -1,62 +1,19 @@
 <script lang="ts">
-	import { z } from 'zod'
 	import { match, matchStrict } from 'canary-js'
+	import { AnimalsResponseSchema } from './schemas'
+	import type {
+		Cmd,
+		Frame,
+		KeyboardShortcut,
+		Model,
+		Msg,
+		NextModelAndCommands,
+		SelectedAnimal,
+	} from '$lib/types'
 	import { fade } from 'svelte/transition'
 	import Header from '$lib/Header.svelte'
 	import TimeTravel from '$lib/TimeTravel.svelte'
-
-	// Validation Schemas
-	const AnimalResponseSchema = z.object({
-		id: z.string().nonempty(),
-		url: z.httpUrl(),
-	})
-
-	const AnimalsResponseSchema = z.array(AnimalResponseSchema)
-
-	// TYPES
-	type Animal = z.infer<typeof AnimalResponseSchema>
-
-	type SelectedAnimal = 'Cat' | 'Dog'
-
-	type KeyboardShortcut = 'c' | 'd' | 'x' | 'X'
-
-	// --- Remote Fetch State (async state machine) ---
-	type RemoteFetchStatus<E> =
-		| { kind: 'Idle' }
-		| { kind: 'Loading' }
-		| { kind: 'Failure'; error: E }
-		| { kind: 'Success' }
-
-	type Model = {
-		remoteFetchStatus: RemoteFetchStatus<string>
-		animals: Animal[]
-		selectedAnimal: SelectedAnimal
-	}
-
-	type NextModelAndCommands = {
-		nextModel: Model
-		nextCommands: Cmd[]
-	}
-
-	type Frame = NextModelAndCommands & {
-		msg: Msg
-	}
-
-	// Messages & Commands
-	type Msg =
-		| { kind: 'UserClickedGetNewAnimal' }
-		| { kind: 'AnimalsLoaded'; animals: Animal[] }
-		| { kind: 'AnimalsFailedToLoad'; error: string }
-		| { kind: 'UserClickedRemoveLast' }
-		| { kind: 'UserClickedRemoveAll' }
-		| { kind: 'UserPressedKey'; key: KeyboardShortcut }
-		| { kind: 'UserSelectedAnimal'; animal: SelectedAnimal }
-
-	type Cmd =
-		| { kind: 'FetchAnimal' }
-		| { kind: 'LogInfo'; message: string }
-		| { kind: 'LogError'; message: string }
-
+	
 	// Message -> (NextModel, NextCommand)
 	const computeNextModelAndCommands = (msg: Msg): NextModelAndCommands =>
 		matchStrict(msg, {
@@ -223,20 +180,18 @@
 	let frameIndex = $state<number>(-1)
 
 	// Derived values
+	let isLastFrame = $derived(frameIndex === frames.length - 1)
+
 	let visibleModel = $derived<Model>(
-		frameIndex === frames.length - 1 ? model : frames[frameIndex]?.nextModel
+		isLastFrame ? model : frames[frameIndex]?.nextModel
 	)
-	
+
+	let isTimeTraveling = $derived(!isLastFrame)
+
 	let api = $derived(
 		`https://api.the${visibleModel.selectedAnimal.toLowerCase()}api.com/v1/images/search`
 	)
 	
-	let animalsCount = $derived(visibleModel.animals.length)
-	
-	let isTimeTraveling = $derived(frameIndex !== frames.length - 1)
-	
-	let isNoAnimals = $derived(animalsCount === 0)
-
 	let isLoading = $derived(visibleModel.remoteFetchStatus.kind === 'Loading')
 
 	let isAnimalRequestFailure = $derived(
@@ -252,65 +207,9 @@
 		})
 	)
 
-	$inspect(frames).with((type, frames) =>
-		matchStrict(
-			{ kind: type },
-			{
-				init: () => {
-					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
-					console.log('App Started 🚀')
-					console.group('%cInitial Model:', 'color: deepskyblue;')
-					console.log(
-						'%cremoteFetchStatus:',
-						'color: mediumseagreen;',
-						$state.snapshot(model.remoteFetchStatus)
-					)
-					console.log(
-						'%canimals:',
-						'color: mediumseagreen;',
-						$state.snapshot(model.animals)
-					)
-					console.log(
-						'%cselectedAnimal:',
-						'color: mediumseagreen;',
-						$state.snapshot(model.selectedAnimal)
-					)
-					console.groupEnd()
-					console.groupEnd()
-				},
+	let animalsCount = $derived(visibleModel.animals.length)
 
-				update: () => {
-					const frame = frames.at(-1)
-
-					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
-					console.log('%cmsg:', 'color: deepskyblue;', frame?.msg)
-					console.group('%cNext Model & Next Commands:', 'color: cornflowerblue;')
-					console.log(
-						'%cremoteFetchStatus:',
-						'color: mediumseagreen;',
-						frame?.nextModel.remoteFetchStatus
-					)
-					console.log(
-						'%canimals:',
-						'color: mediumseagreen;',
-						frame?.nextModel.animals
-					)
-					console.log(
-						'%cselectedAnimal:',
-						'color: mediumseagreen;',
-						frame?.nextModel.selectedAnimal
-					)
-					console.log(
-						'%ccommands:',
-						'color: goldenrod;',
-						JSON.stringify(frame?.nextCommands, null, 2)
-					)
-					console.groupEnd()
-					console.groupEnd()
-				},
-			}
-		)
-	)
+	let isNoAnimals = $derived(animalsCount === 0)
 </script>
 
 <svelte:window
@@ -400,9 +299,9 @@
 						<div>Number of animals: {animalsCount}</div>
 					</div>
 
-					<div class:text-red-600={isAnimalRequestFailure}>
+					<div>
 						{#if isAnimalRequestFailure}
-							<pre>{fetchRequestStatusMessage}</pre>
+							<pre class="text-red-600">{fetchRequestStatusMessage}</pre>
 						{:else}
 							<p>{fetchRequestStatusMessage}</p>
 						{/if}
@@ -412,5 +311,5 @@
 		</section>
 	</main>
 
-	<TimeTravel {frames} bind:frameIndex></TimeTravel>
+	<TimeTravel {model} {frames} bind:frameIndex></TimeTravel>
 </div>

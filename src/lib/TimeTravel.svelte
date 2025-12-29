@@ -1,5 +1,67 @@
 <script lang="ts">
-	let { frameIndex = $bindable(), frames } = $props()
+	import { matchStrict } from 'canary-js'
+	
+	let { model, frameIndex = $bindable(), frames } = $props()
+
+	$inspect(frames).with((type, frames) =>
+		matchStrict(
+			{ kind: type },
+			{
+				init: () => {
+					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
+					console.log('App Started 🚀')
+					console.group('%cInitial Model:', 'color: deepskyblue;')
+					console.log(
+						'%cremoteFetchStatus:',
+						'color: mediumseagreen;',
+						$state.snapshot(model.remoteFetchStatus)
+					)
+					console.log(
+						'%canimals:',
+						'color: mediumseagreen;',
+						$state.snapshot(model.animals)
+					)
+					console.log(
+						'%cselectedAnimal:',
+						'color: mediumseagreen;',
+						$state.snapshot(model.selectedAnimal)
+					)
+					console.groupEnd()
+					console.groupEnd()
+				},
+
+				update: () => {
+					const frame = frames.at(-1)
+
+					console.group(`%cFrame #${frames.length}`, 'color: cornflowerblue;')
+					console.log('%cmsg:', 'color: deepskyblue;', frame?.msg)
+					console.group('%cNext Model & Next Commands:', 'color: cornflowerblue;')
+					console.log(
+						'%cremoteFetchStatus:',
+						'color: mediumseagreen;',
+						frame?.nextModel.remoteFetchStatus
+					)
+					console.log(
+						'%canimals:',
+						'color: mediumseagreen;',
+						frame?.nextModel.animals
+					)
+					console.log(
+						'%cselectedAnimal:',
+						'color: mediumseagreen;',
+						frame?.nextModel.selectedAnimal
+					)
+					console.log(
+						'%ccommands:',
+						'color: goldenrod;',
+						JSON.stringify(frame?.nextCommands, null, 2)
+					)
+					console.groupEnd()
+					console.groupEnd()
+				},
+			}
+		)
+	)
 </script>
 
 <footer class="time-travel">
